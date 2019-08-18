@@ -4,17 +4,23 @@ import static org.junit.Assert.assertEquals;
 
 import java.io.IOException;
 
+import org.junit.Before;
 import org.junit.Test;
 import org.xenei.spanbuffer.Factory;
 import org.xenei.spanbuffer.SpanBuffer;
 
-public class StorageTest {
+public abstract class AbstractStorageTest {
 
 	Storage storage;
 	
-	public StorageTest() throws IOException {
-		storage = new Storage( "/tmp/storage.test");
+	
+	@Before
+	public void setup() throws IOException
+	{
+		storage = createStorage();
 	}
+	
+	abstract Storage createStorage() throws IOException;
 	
 	@Test
 	public void test() throws IOException {
@@ -45,7 +51,7 @@ public class StorageTest {
 		storage.close();
 		System.out.println( storage.stats() );
 		
-		storage = new Storage( "/tmp/storage.test");
+		storage = createStorage();
 		System.out.println( storage.stats() );
 
 		f = storage.read( first );
