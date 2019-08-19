@@ -11,58 +11,83 @@ import org.xenei.spanbuffer.SpanBuffer;
 
 public abstract class AbstractStorageTest {
 
-	Storage storage;
-	
-	
+	private Storage storage;
+
 	@Before
-	public void setup() throws IOException
-	{
+	public void setup() throws IOException {
 		storage = createStorage();
 	}
 	
+	abstract int getEmptySize();
+
 	abstract Storage createStorage() throws IOException;
-	
+
 	@Test
 	public void test() throws IOException {
-		
-		System.out.println( storage.stats() );
-		
-		long first = storage.append( Factory.wrap( "Hello world" ));
-		System.out.println( storage.stats() );
 
-		long second = storage.append( Factory.wrap( "Goodbye cruel world" ));
-		System.out.println( storage.stats() );
+		assertEquals(getEmptySize(), storage.stats().dataLength());
+		assertEquals(0, storage.stats().freeSpace());
+		assertEquals(0, storage.stats().deletedBlocks());
 
-		SpanBuffer f = storage.read( first );
-		assertEquals( "Hello world", f.getText());
-		System.out.println( storage.stats() );
-		
-		SpanBuffer s = storage.read( second );
-		assertEquals( "Goodbye cruel world", s.getText());
-		System.out.println( storage.stats() );
-		
-		storage.delete( first );
-		System.out.println( storage.stats() );
-		
-		long third = storage.append( Factory.wrap( "Hello again"));
-		assertEquals( first, third );
-		System.out.println( storage.stats() );
-		
+		long first = storage.append(Factory.wrap("Hello world"));
+		assertEquals(4096, storage.stats().dataLength());
+		assertEquals(0, storage.stats().freeSpace());
+		assertEquals(0, storage.stats().deletedBlocks());
+
+		long second = storage.append(Factory.wrap("Goodbye cruel world"));
+		assertEquals(6144, storage.stats().dataLength());
+		assertEquals(0, storage.stats().freeSpace());
+		assertEquals(0, storage.stats().deletedBlocks());
+
+		SpanBuffer f = storage.read(first);
+		assertEquals("Hello world", f.getText());
+		assertEquals(6144, storage.stats().dataLength());
+		assertEquals(0, storage.stats().freeSpace());
+		assertEquals(0, storage.stats().deletedBlocks());
+
+		SpanBuffer s = storage.read(second);
+		assertEquals("Goodbye cruel world", s.getText());
+		assertEquals(6144, storage.stats().dataLength());
+		assertEquals(0, storage.stats().freeSpace());
+		assertEquals(0, storage.stats().deletedBlocks());
+
+		storage.delete(first);
+		assertEquals(6144, storage.stats().dataLength());
+		assertEquals(2048, storage.stats().freeSpace());
+		assertEquals(1, storage.stats().deletedBlocks());
+
+		long third = storage.append(Factory.wrap("Hello again"));
+		assertEquals(first, third);
+		assertEquals(6144, storage.stats().dataLength());
+		assertEquals(0, storage.stats().freeSpace());
+		assertEquals(0, storage.stats().deletedBlocks());
+
 		storage.close();
-		System.out.println( storage.stats() );
-		
+		assertEquals(-1, storage.stats().dataLength());
+		assertEquals(-1, storage.stats().freeSpace());
+		assertEquals(-1, storage.stats().deletedBlocks());
+
 		storage = createStorage();
-		System.out.println( storage.stats() );
+		assertEquals(6144, storage.stats().dataLength());
+		assertEquals(0, storage.stats().freeSpace());
+		assertEquals(0, storage.stats().deletedBlocks());
 
-		f = storage.read( first );
-		assertEquals( "Hello again", f.getText());
-		System.out.println( storage.stats() );
-		
-		s = storage.read( second );
-		assertEquals( "Goodbye cruel world", s.getText());
-		System.out.println( storage.stats() );
-		
+		f = storage.read(first);
+		assertEquals("Hello again", f.getText());
+		assertEquals(6144, storage.stats().dataLength());
+		assertEquals(0, storage.stats().freeSpace());
+		assertEquals(0, storage.stats().deletedBlocks());
+
+		s = storage.read(second);
+		assertEquals("Goodbye cruel world", s.getText());
+		assertEquals(6144, storage.stats().dataLength());
+		assertEquals(0, storage.stats().freeSpace());
+		assertEquals(0, storage.stats().deletedBlocks());
+
 		storage.close();
-				
+		assertEquals(-1, storage.stats().dataLength());
+		assertEquals(-1, storage.stats().freeSpace());
+		assertEquals(-1, storage.stats().deletedBlocks());
+
 	}
 }

@@ -131,8 +131,8 @@ public class MemoryMappedStorage implements Storage {
 	public void delete(long offset) throws IOException {
 		BlockHeader header = new BlockHeader(offset);
 		freeBuffer.add(header.blockInfo);
-		while (header.nextBlock != 0) {
-			header = new BlockHeader(header.nextBlock);
+		while (header.nextBlock() != 0) {
+			header = new BlockHeader(header.nextBlock());
 			freeBuffer.add(header.blockInfo);
 		}
 		writeFreeBlocks();
@@ -148,20 +148,20 @@ public class MemoryMappedStorage implements Storage {
 
 	private class BlockHeader {
 		public static final int HEADER_SIZE = 3 * Long.BYTES;
+		private static final int USED_OFFSET = Long.BYTES;
+		private static final int NEXT_OFFSET = Long.BYTES * 2;
+		
 		private MappedByteBuffer buffer;
 		private LongSpan blockInfo;
-		private long buffUsed;
-		private long nextBlock;
 
 		public BlockHeader(FileChannel fileChannel) throws IOException {
 			long offset = fileChannel.size();
-			MappedByteBuffer buff = fileChannel.map(FileChannel.MapMode.READ_WRITE, offset, DEFAULT_BLOCK_SIZE);
-			buff.position(0);
-			buff.putLong(DEFAULT_BLOCK_SIZE);
-			buff.putLong(DEFAULT_BLOCK_SIZE);
+			buffer= fileChannel.map(FileChannel.MapMode.READ_WRITE, offset, DEFAULT_BLOCK_SIZE);
+			buffer.position(0);
+			buffer.putLong(DEFAULT_BLOCK_SIZE);
 			blockInfo = LongSpan.fromLength(offset, DEFAULT_BLOCK_SIZE);
-			nextBlock = 0;
-			buffUsed = DEFAULT_BLOCK_SIZE;
+			buffUsed(DEFAULT_BLOCK_SIZE - HEADER_SIZE);
+			nextBlock( 0 );
 			clear();
 		}
 
@@ -174,30 +174,42 @@ public class MemoryMappedStorage implements Storage {
 		}
 
 		public BlockHeader(long offset, MappedByteBuffer buffer) {
-			blockInfo = LongSpan.fromLength(offset, buffer.getLong());
-			buffUsed = buffer.getLong();
-			nextBlock = buffer.getLong();
+			this.buffer = buffer;
+			blockInfo = LongSpan.fromLength(offset, buffer.getLong());			
 		}
 
-		public void setNextBlock(long nextBlock) {
-			buffer.putLong(Long.BYTES * 2, nextBlock);
-			this.nextBlock = nextBlock;
+		public void nextBlock(long nextBlock) {
+			buffer.putLong(NEXT_OFFSET, nextBlock);
+		}
+		
+		public long nextBlock()
+		{
+			return buffer.getLong(NEXT_OFFSET);
 		}
 
+		public void buffUsed(long buffUsed) {
+			buffer.putLong(USED_OFFSET, buffUsed);
+		}
+		
+		public long buffUsed()
+		{
+			return buffer.getLong(USED_OFFSET);
+		}
+		
 		public SpanBuffer getSpanBuffer() throws IOException {
 			List<SpanBuffer> lst = new ArrayList<SpanBuffer>();
-			SpanBuffer sb = Factory.wrap(buffer).cut(HEADER_SIZE);
-			if (sb.getLength() > buffUsed) {
-				sb = sb.head(buffUsed);
+			SpanBuffer sb = Factory.wrap(buffer.position(0).duplicate()).cut(HEADER_SIZE);
+			if (sb.getLength() > buffUsed()) {
+				sb = sb.head(buffUsed());
 			}
 			lst.add(sb);
-			if (sb.getLength() < buffUsed) {
-				long len = buffUsed - sb.getLength();
+			if (sb.getLength() < buffUsed()) {
+				long len = buffUsed() - sb.getLength();
 				lst.add(Factory.wrap(fileChannel.map(FileChannel.MapMode.READ_WRITE, sb.getEnd() + 1, len)));
 			}
 
-			if (nextBlock != 0) {
-				BlockHeader nxtHeader = new BlockHeader(nextBlock);
+			if (nextBlock() != 0) {
+				BlockHeader nxtHeader = new BlockHeader(nextBlock());
 				lst.add(nxtHeader.getSpanBuffer());
 			}
 			return Factory.merge(lst.iterator());
@@ -208,10 +220,10 @@ public class MemoryMappedStorage implements Storage {
 			long limit = Long.min(blockInfo.getLength(), buffer.capacity());
 			buffer.position(HEADER_SIZE);
 			BufferOutputStream bos = new BufferOutputStream(buffer);
-			IOUtils.copyLarge(in, bos, 0, limit);
+			buffUsed(IOUtils.copyLarge(in, bos, 0, limit));
 			if (in.available() > 0) {
 				if (buffer.capacity() < blockInfo.getLength()) {
-					long len = buffUsed - buffer.capacity();
+					long len = buffUsed() - buffer.capacity();
 					long pos = blockInfo.getOffset() + buffer.capacity();
 					bos = new BufferOutputStream(fileChannel.map(FileChannel.MapMode.READ_WRITE, pos, len));
 					IOUtils.copyLarge(in, bos, 0, len);
@@ -220,7 +232,7 @@ public class MemoryMappedStorage implements Storage {
 			if (in.available() > 0) {
 				BlockHeader nextHeader = null;
 				freeInfo.skipFlush = true;
-				if (nextBlock == 0) {
+				if (nextBlock() == 0) {
 					if (freeInfo.useFreeList && !freeBuffer.isEmpty()) {
 						synchronized (freeBuffer) {
 							freeInfo.needsFlush = true;
@@ -231,19 +243,20 @@ public class MemoryMappedStorage implements Storage {
 					}
 
 				}
-				setNextBlock(nextHeader.blockInfo.getOffset());
+				nextBlock(nextHeader.blockInfo.getOffset());
 				nextHeader.write(in, freeInfo);
 			} else {
-				if (nextBlock != 0) {
+				if (nextBlock() != 0) {
 					// remove extra blocks.
 					if (freeInfo.useFreeList) {
-						delete(nextBlock);
+						delete(nextBlock());
+						nextBlock(0);
 					} else {
-						long theBlock = nextBlock;
+						long theBlock = nextBlock();
 						while (theBlock != 0) {
 							BlockHeader nextHeader = new BlockHeader(theBlock);
 							nextHeader.clear();
-							theBlock = nextHeader.nextBlock;
+							theBlock = nextHeader.nextBlock();
 						}
 
 					}
