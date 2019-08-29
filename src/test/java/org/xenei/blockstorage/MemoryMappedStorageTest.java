@@ -13,6 +13,7 @@ public class MemoryMappedStorageTest extends AbstractStorageTest {
 
 	}
 	
+	@Override
 	public int getEmptySize() {
 		 return 2048;
 	}

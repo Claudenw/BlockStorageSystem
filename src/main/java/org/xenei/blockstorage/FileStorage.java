@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.xenei.blockstorage;
 
 import java.io.File;
@@ -15,17 +32,36 @@ import org.apache.commons.io.IOUtils;
 import org.xenei.span.LongSpan;
 import org.xenei.spanbuffer.Factory;
 import org.xenei.spanbuffer.SpanBuffer;
+import org.xenei.spanbuffer.Walker;
 import org.xenei.spanbuffer.streams.SpanBufferOutputStream;
 
+/**
+ * A file storage system that reads/write from a file directly.
+ *
+ */
 public class FileStorage implements Storage {
 
 	private final static int DEFAULT_BLOCK_SIZE = 2 * 1024;
 
 	private RandomAccessFile file;
+	
+	/**
+	 * The free blocks in a SpanBuffer structure with block
+	 * add and remove functionality.
+	 */
 	private FreeBuffer freeBuffer;
+	/**
+	 * An output stream that always writes at the current file
+	 * location.
+	 */
 	private OutputStream fileStream;
 	private Stats stats;
 
+	/**
+	 * Constructor
+	 * @param fileName The name of the file to process
+	 * @throws IOException on error
+	 */
 	public FileStorage(String fileName) throws IOException {
 		fileStream = new OutputStream() {
 
@@ -75,45 +111,94 @@ public class FileStorage implements Storage {
 		stats = new StatsImpl();
 	}
 
+	@Override
 	public Stats stats() {
 		return stats;
 	}
 
+	@Override
 	public SpanBuffer getFirstRecord() throws IOException {
 		return read(DEFAULT_BLOCK_SIZE);
 	}
 
+	@Override
 	public void setFirstRecord(SpanBuffer buffer) throws IOException {
 		write(DEFAULT_BLOCK_SIZE, buffer);
 	}
 
-	private void writeFreeBlocks() throws IOException {
-		BlockHeader header = new BlockHeader();
-		header.read(0);
-		InputStream is = freeBuffer.getInputStream();
-		byte[] buffer = new byte[DEFAULT_BLOCK_SIZE];
+	/**
+	 * copies data from a walker into the file stream.
+	 * @param walker the walker to read from.
+	 * @param len the maximum number of bytes to write.
+	 * @param buffer the buffer to write with.
+	 * @return the number of bytes writen.
+	 * @throws IOException
+	 */
+	private void fillBlock( Walker walker, long len, byte[] buffer) throws IOException
+	{
+		long bytesCopied = 0;
+		int limit = (int) Long.min(len, buffer.length );
+		int bytesRead = 0;
+		while (walker.hasCurrent() && limit>0)
+		{
+			if (limit > buffer.length)
+			{
+				bytesRead = walker.read(buffer);
+			} else {
+				bytesRead = walker.read(buffer, 0, limit);
+			}
+			fileStream.write( buffer, 0, bytesRead );
+			bytesCopied += bytesRead;
+		}
+		if (bytesCopied < len)
+		{
+			try (InputStream in =new FillBuffer( len-bytesCopied ).getInputStream())
+			{
+				IOUtils.copyLarge( in, fileStream, buffer );
+			}
+		}
 
-		IOUtils.copyLarge(is, fileStream, 0, header.getDataSpan().getLength(), buffer);
-		while (is.available() > 0) {
+	}
+	/**
+	 * write the free blocks to the file.
+	 */
+	private void writeFreeBlocks() throws IOException {
+		// create a buffer to copy with.
+		byte[] buffer = new byte[DEFAULT_BLOCK_SIZE];
+		BlockHeader header = new BlockHeader();
+		// Read the first block and position file stream.
+		header.read(0);
+		// file stream is now positiond at header data block
+		Walker walker = freeBuffer.getWalker();
+		fillBlock( walker, header.getDataSpan().getLength(), buffer);
+		
+		
+		/* The first block is now full so write any remaining data */
+		
+		while (walker.hasCurrent()) {
 			if (header.nextBlock != 0) {
 				header.read(header.nextBlock);
-				IOUtils.copyLarge(is, fileStream, 0, header.getDataSpan().getLength(), buffer);
+				fillBlock( walker, header.getDataSpan().getLength(), buffer);
 			} else {
 				header.nextBlock = file.length();
 				header.write();
-				header.blockInfo = LongSpan.fromLength(header.nextBlock, is.available() + BlockHeader.HEADER_SIZE);
+				header.blockInfo = LongSpan.fromLength(header.nextBlock, walker.remaining() + BlockHeader.HEADER_SIZE);
 				header.nextBlock = 0;
-				header.buffUsed = is.available();
+				header.buffUsed = walker.remaining();
 				header.write();
-				IOUtils.copyLarge(is, fileStream, 0, is.available(), buffer);
+				fillBlock( walker, header.getDataSpan().getLength(), buffer);
 			}
 		}
+
+		/* clear any remaining extra blocks */
 		while (header.nextBlock != 0) {
 			header.read(header.nextBlock);
 			header.buffUsed = 0;
 			header.write();
-			is = new FillBuffer(header.getDataSpan().getLength()).getInputStream();
-			IOUtils.copyLarge(is, fileStream, 0, header.getDataSpan().getLength(), buffer);
+			try (InputStream is = new FillBuffer(header.getDataSpan().getLength()).getInputStream())
+			{
+				IOUtils.copyLarge(is, fileStream);
+			}
 		}
 
 	}
@@ -153,6 +238,7 @@ public class FileStorage implements Storage {
 		return Long.max(buff.getLength() + BlockHeader.HEADER_SIZE, DEFAULT_BLOCK_SIZE);
 	}
 
+	@Override
 	public void write(long pos, Serializable s) throws IOException {
 		SpanBufferOutputStream sbos = new SpanBufferOutputStream();
 		try (ObjectOutputStream oos = new ObjectOutputStream(sbos)) {
@@ -161,12 +247,14 @@ public class FileStorage implements Storage {
 		write(pos, sbos.getSpanBuffer());
 	}
 
+	@Override
 	public void write(long pos, SpanBuffer buff) throws IOException {
 		BlockHeader header = new BlockHeader();
 		header.read(pos);
 		write(buff, header, null);
 	}
 
+	@Override
 	public long append(Serializable s) throws IOException {
 		SpanBufferOutputStream sbos = new SpanBufferOutputStream();
 		try (ObjectOutputStream oos = new ObjectOutputStream(sbos)) {
@@ -175,6 +263,7 @@ public class FileStorage implements Storage {
 		return append(sbos.getSpanBuffer());
 	}
 
+	@Override
 	public long append(SpanBuffer buff) throws IOException {
 		if (!freeBuffer.isEmpty()) {
 			return freeWrite(buff);
@@ -238,12 +327,14 @@ public class FileStorage implements Storage {
 		}
 	}
 
+	@Override
 	public Serializable readObject(long pos) throws IOException, ClassNotFoundException {
 		try (ObjectInputStream ois = new ObjectInputStream(read(pos).getInputStream())) {
 			return (Serializable) ois.readObject();
 		}
 	}
 
+	@Override
 	public SpanBuffer read(long offset) throws IOException {
 		BlockHeader header = new BlockHeader();
 		header.read(offset);
@@ -270,6 +361,7 @@ public class FileStorage implements Storage {
 		return (sb.size() == 1) ? sb.get(0) : Factory.merge(sb.stream());
 	}
 
+	@Override
 	public void delete(long offset) throws IOException {
 		BlockHeader header = new BlockHeader();
 		header.read(offset);
@@ -281,18 +373,28 @@ public class FileStorage implements Storage {
 		writeFreeBlocks();
 	}
 
+	@Override
 	public void close() throws IOException {
 		file.close();
 		freeBuffer = null;
 
 	}
 
+	/**
+	 * A block header.  Each block has a header as the first set of data.
+	 *
+	 */
 	private class BlockHeader {
 		public static final int HEADER_SIZE = 3 * Long.BYTES;
-		LongSpan blockInfo;
-		long buffUsed;
-		long nextBlock;
+		private LongSpan blockInfo;
+		private long buffUsed;
+		private long nextBlock;
 
+		/**
+		 * Reat the header at the specified offset.
+		 * @param offset the offset to read the header from.
+		 * @throws IOException on error.
+		 */
 		public void read(long offset) throws IOException {
 			file.seek(offset);
 			blockInfo = LongSpan.fromLength(offset, file.readLong());
@@ -300,6 +402,10 @@ public class FileStorage implements Storage {
 			nextBlock = file.readLong();
 		}
 
+		/**
+		 * Write the block back to the file.
+		 * @throws IOException on error.
+		 */
 		public void write() throws IOException {
 			file.seek(blockInfo.getOffset());
 			file.writeLong(blockInfo.getLength());
@@ -307,15 +413,27 @@ public class FileStorage implements Storage {
 			file.writeLong(nextBlock);
 		}
 
+		/**
+		 * Get the span of the data in this block.  This is the block location and 
+		 * length minus the header.
+		 * @return the span for the data in this block.
+		 */
 		public LongSpan getDataSpan() {
 			return LongSpan.fromEnd(blockInfo.getOffset() + HEADER_SIZE, blockInfo.getEnd());
 		}
 	}
 
+	/**
+	 * An input stream that is limited to a specific number of bytes.
+	 */
 	private class LimitedInputStream extends InputStream {
 
-		int limit;
+		private int limit;
 
+		/**
+		 * Create a limited input stream
+		 * @param limit the limit
+		 */
 		public LimitedInputStream(int limit) {
 			this.limit = limit;
 		}
@@ -347,7 +465,11 @@ public class FileStorage implements Storage {
 		}
 	}
 
+	/**
+	 * Stats implementation for FileStorage.
+	 */
 	public class StatsImpl implements Stats {
+		
 		@Override
 		public long dataLength() {
 			try {

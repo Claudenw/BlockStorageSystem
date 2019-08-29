@@ -12,6 +12,7 @@ public class FileStorageTest extends AbstractStorageTest {
 		}
 	}
 
+	@Override
 	public int getEmptySize() {
 		 return 2048;
 	}

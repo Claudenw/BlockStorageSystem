@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.xenei.blockstorage;
 
 import java.io.File;
@@ -18,6 +35,11 @@ import org.xenei.spanbuffer.Factory;
 import org.xenei.spanbuffer.SpanBuffer;
 import org.xenei.spanbuffer.streams.SpanBufferOutputStream;
 
+/**
+ * A memory mapped storage implementation.  Reads and write the
+ * the file via memory mapped blocks.
+ *
+ */
 public class MemoryMappedStorage implements Storage {
 
 	private final static int DEFAULT_BLOCK_SIZE = 2 * 1024;
@@ -26,6 +48,11 @@ public class MemoryMappedStorage implements Storage {
 	private FreeBuffer freeBuffer;
 	private Stats stats;
 
+	/**
+	 * Constructor.
+	 * @param fileName the file to process.
+	 * @throws IOException on error.
+	 */
 	@SuppressWarnings("resource")
 	public MemoryMappedStorage(String fileName) throws IOException {
 
@@ -142,10 +169,12 @@ public class MemoryMappedStorage implements Storage {
 	public void close() throws IOException {
 		fileChannel.close();
 		freeBuffer = null;
-		
-
 	}
 
+	/**
+	 * A block header.  Each block has a header as the first set of data.
+	 *
+	 */
 	private class BlockHeader {
 		public static final int HEADER_SIZE = 3 * Long.BYTES;
 		private static final int USED_OFFSET = Long.BYTES;
@@ -154,6 +183,11 @@ public class MemoryMappedStorage implements Storage {
 		private MappedByteBuffer buffer;
 		private LongSpan blockInfo;
 
+		/** 
+		 * Create a block at the end of the file channel.
+		 * @param fileChannel the file channel to work with.
+		 * @throws IOException on error.
+		 */
 		public BlockHeader(FileChannel fileChannel) throws IOException {
 			long offset = fileChannel.size();
 			buffer= fileChannel.map(FileChannel.MapMode.READ_WRITE, offset, DEFAULT_BLOCK_SIZE);
@@ -165,37 +199,76 @@ public class MemoryMappedStorage implements Storage {
 			clear();
 		}
 
+		/**
+		 * Read the block header from the specified location.
+		 * @param span the Span for the block position and length.
+		 * @throws IOException on error.
+		 */
 		public BlockHeader(LongSpan span) throws IOException {
 			this(span.getOffset(), fileChannel.map(FileChannel.MapMode.READ_WRITE, span.getOffset(), span.getLength()));
 		}
 
+		/**
+		 * Read a block header from the specified position in the channel.
+		 * @param offset the offset to read from.
+		 * @throws IOException on error.
+		 */
 		public BlockHeader(long offset) throws IOException {
 			this(offset, fileChannel.map(FileChannel.MapMode.READ_WRITE, offset, DEFAULT_BLOCK_SIZE));
 		}
 
+		/**
+		 * Create a block header from the buffer and the specified offset.
+		 * The offset should be the position from which the buffer was read.
+		 * @param offset the offset of the buffer in the file.
+		 * @param buffer the buffer.
+		 */
 		public BlockHeader(long offset, MappedByteBuffer buffer) {
 			this.buffer = buffer;
 			blockInfo = LongSpan.fromLength(offset, buffer.getLong());			
 		}
 
+		/**
+		 * Set the next block
+		 * @param nextBlock the position of the next block.
+		 */
 		public void nextBlock(long nextBlock) {
 			buffer.putLong(NEXT_OFFSET, nextBlock);
 		}
 		
+		/**
+		 * Get the next block,
+		 * @return the next block or zero (0) if not set.
+		 */
 		public long nextBlock()
 		{
 			return buffer.getLong(NEXT_OFFSET);
 		}
 
+		/**
+		 * Set the number of bytes used in the buffer.  
+		 * This may be less than the size of the buffer.
+		 * @param buffUsed the number of bytes used.
+		 */
 		public void buffUsed(long buffUsed) {
 			buffer.putLong(USED_OFFSET, buffUsed);
 		}
 		
+		/**
+		 * Get the number of bytes used in the buffer.
+		 * This may be less than the size of the buffer.
+		 * @return the number of bytes used.
+		 */
 		public long buffUsed()
 		{
 			return buffer.getLong(USED_OFFSET);
 		}
 		
+		/**
+		 * Get the span buffer that contains the data for this block. 
+		 * @return the span buffer containing the data for this block.
+		 * @throws IOException
+		 */
 		public SpanBuffer getSpanBuffer() throws IOException {
 			List<SpanBuffer> lst = new ArrayList<SpanBuffer>();
 			SpanBuffer sb = Factory.wrap(buffer.position(0).duplicate()).cut(HEADER_SIZE);
@@ -293,7 +366,12 @@ public class MemoryMappedStorage implements Storage {
 		boolean needsFlush = false;
 	}
 
+	/**
+	 * Stats implementation foe MemoryMappedStorage.
+	 *
+	 */
 	public class StatsImpl implements Stats {
+		
 		@Override
 		public long dataLength() {
 			try {
@@ -319,10 +397,18 @@ public class MemoryMappedStorage implements Storage {
 		}
 	}
 
+	/**
+	 * An output stream that writes to the memory mapped buffer.
+	 *
+	 */
 	private class BufferOutputStream extends OutputStream {
 
 		private MappedByteBuffer buffer;
 
+		/**
+		 * Constructor.
+		 * @param buffer the buffer to write to.
+		 */
 		BufferOutputStream(MappedByteBuffer buffer) {
 			this.buffer = buffer;
 		}
