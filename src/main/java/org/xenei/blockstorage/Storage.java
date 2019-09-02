@@ -25,9 +25,9 @@ import org.xenei.spanbuffer.SpanBuffer;
 /**
  * The BlockStorage interface.
  * 
- * When writing to the block storage the storage system will attempt to reuse 
- * deleted data blocks and then extend the file.  The system returns a block
- * number that is then used to access the data later. 
+ * When writing to the block storage the storage system will attempt to reuse
+ * deleted data blocks and then extend the file. The system returns a block
+ * number that is then used to access the data later.
  *
  */
 public interface Storage extends Closeable {
@@ -39,16 +39,17 @@ public interface Storage extends Closeable {
 
 	/**
 	 * Get the stats.
+	 * 
 	 * @return the stats for this storage.
 	 */
 	public Stats stats();
 
 	/**
-	 * Get the first record.  Since the storage system utilizes a free 
-	 * list, and that free list may be in the first block, or there may be
-	 * other overhead stored at the start of the file, this method returns the
-	 * first usable datablock.  This block may be in use, may cause the file to be
-	 * extended.
+	 * Get the first record. Since the storage system utilizes a free list, and that
+	 * free list may be in the first block, or there may be other overhead stored at
+	 * the start of the file, this method returns the first usable datablock. This
+	 * block may be in use, may cause the file to be extended.
+	 * 
 	 * @return the first application available block in the system.
 	 * @throws IOException on error.
 	 */
@@ -56,30 +57,33 @@ public interface Storage extends Closeable {
 
 	/**
 	 * Write the buffer into the first record.
+	 * 
 	 * @param buffer the buffer to write.
 	 * @throws IOException on error.
 	 */
-	public void setFirstRecord(SpanBuffer buffer) throws IOException;	
+	public void setFirstRecord(SpanBuffer buffer) throws IOException;
 
 	/**
 	 * Write the serializable object into the specified block.
+	 * 
 	 * @param blockNumber the block number to write into
-	 * @param s A serializable object
+	 * @param s           A serializable object
 	 * @throws IOException on error.
 	 */
 	public void write(long blockNumber, Serializable s) throws IOException;
 
 	/**
 	 * Write the buffer into the specified block.
+	 * 
 	 * @param blockNumber the block number to write into
-	 * @param buff a SpanBuffer to write.
+	 * @param buff        a SpanBuffer to write.
 	 * @throws IOException on error.
 	 */
 	public void write(long blockNumber, SpanBuffer buff) throws IOException;
 
 	/**
-	 * Append the serializable object to the storage.  This call will attempt
-	 * to use free space before it extends the file.
+	 * Append the serializable object to the storage. This call will attempt to use
+	 * free space before it extends the file.
 	 * 
 	 * @param s the serializable object.
 	 * @return the blockNumber for the stored object.
@@ -88,45 +92,50 @@ public interface Storage extends Closeable {
 	public long append(Serializable s) throws IOException;
 
 	/**
-	 * Append the buffer to the storage.  This call will attempt
-	 * to use free space before it extends the file.
+	 * Append the buffer to the storage. This call will attempt to use free space
+	 * before it extends the file.
 	 * 
 	 * @param buff the SpanBuffer to write.
 	 * @return the blockNumber for the stored object.
 	 * @throws IOException on error.
-	 */	
+	 */
 	public long append(SpanBuffer buff) throws IOException;
 
 	/**
 	 * Read a serialized object from the block.
+	 * 
 	 * @param blockNumber the block to read.
 	 * @return the deserialized object.
-	 * @throws IOException on error.
-	 * @throws ClassNotFoundException if the serialized class is not available on the classpath.
+	 * @throws IOException            on error.
+	 * @throws ClassNotFoundException if the serialized class is not available on
+	 *                                the classpath.
 	 */
 	public Serializable readObject(long blockNumber) throws IOException, ClassNotFoundException;
 
 	/**
 	 * Read a buffer from the block.
+	 * 
 	 * @param blockNumber the block to read.
 	 * @return A SpanBuffer containing the data.
 	 * @throws IOException on error.
 	 */
 	public SpanBuffer read(long blockNumber) throws IOException;
-	
+
 	/**
 	 * Delete a block and place it on the freelist.
+	 * 
 	 * @param blockNumber the block number to delete.
 	 * @throws IOException on error.
 	 */
 	public void delete(long blockNumber) throws IOException;
 
 	/**
-	 * Close the storage system.
-	 * Attempting any operation on a closed system yields unpredictable results.
+	 * Close the storage system. Attempting any operation on a closed system yields
+	 * unpredictable results.
+	 * 
 	 * @throws IOException on error.
 	 */
 	@Override
 	public void close() throws IOException;
-	
+
 }

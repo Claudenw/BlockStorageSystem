@@ -32,11 +32,11 @@ import org.xenei.spanbuffer.SpanBuffer;
 
 /**
  * An Span buffer that wraps the set of free blocks so that it is easy to
- * read/write from the storage layer.  Free blocks are blocks that were allocated
+ * read/write from the storage layer. Free blocks are blocks that were allocated
  * but have since been freed.
  *
  */
-class FreeBuffer extends AbstractSpanBuffer {
+public class FreeBuffer extends AbstractSpanBuffer {
 
 	private TreeSet<LongSpan> freeBlocks;
 
@@ -50,6 +50,7 @@ class FreeBuffer extends AbstractSpanBuffer {
 
 	/**
 	 * Constructor.
+	 * 
 	 * @param data the spanbuffer that contains the free buffer data.
 	 * @throws IOException
 	 */
@@ -86,7 +87,8 @@ class FreeBuffer extends AbstractSpanBuffer {
 	}
 
 	/**
-	 * Get the number of freed blocks 
+	 * Get the number of freed blocks
+	 * 
 	 * @return the number of freed blocks.
 	 */
 	public int getBlockCount() {
@@ -95,6 +97,7 @@ class FreeBuffer extends AbstractSpanBuffer {
 
 	/**
 	 * Get the next free block.
+	 * 
 	 * @return the Span for the next free block
 	 */
 	public LongSpan getBlock() {
@@ -103,6 +106,7 @@ class FreeBuffer extends AbstractSpanBuffer {
 
 	/**
 	 * Add a span to the list of free blocks.
+	 * 
 	 * @param block the block to add.
 	 */
 	public void add(LongSpan block) {
@@ -111,6 +115,7 @@ class FreeBuffer extends AbstractSpanBuffer {
 
 	/**
 	 * See if there are no more free blocks.
+	 * 
 	 * @return true if there are no free blocks available.
 	 */
 	public boolean isEmpty() {
@@ -165,8 +170,7 @@ class FreeBuffer extends AbstractSpanBuffer {
 	@Override
 	public byte read(long position) throws IOException {
 		if (position > getEnd()) {
-			throw new IOException(
-					String.format("Position %s is past the end of the buffer (%s)", position, getEnd()));
+			throw new IOException(String.format("Position %s is past the end of the buffer (%s)", position, getEnd()));
 		}
 
 		int byteOffset = (int) position % LongSpan.BYTES;
@@ -215,6 +219,13 @@ class FreeBuffer extends AbstractSpanBuffer {
 	}
 
 	@Override
+	public int read(long position, ByteBuffer buff) {
+		ByteBuffer bb = ByteBuffer.allocate(buff.remaining());
+		buff.put(bb);
+		return bb.capacity();
+	}
+
+	@Override
 	public long getLength() {
 		return (freeBlocks.size() * 2 * Long.BYTES) - getOffset();
 	}
@@ -225,7 +236,8 @@ class FreeBuffer extends AbstractSpanBuffer {
 	}
 
 	/**
-	 * Get the number of bytes in all of the free blocks combined. 
+	 * Get the number of bytes in all of the free blocks combined.
+	 * 
 	 * @return the number of free bytes.
 	 */
 	public long getFreeSpace() {

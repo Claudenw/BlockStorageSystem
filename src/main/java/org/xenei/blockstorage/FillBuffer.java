@@ -18,6 +18,7 @@
 package org.xenei.blockstorage;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 import org.xenei.span.LongSpan;
@@ -35,6 +36,7 @@ class FillBuffer extends AbstractSpanBuffer {
 
 	/**
 	 * Constructor
+	 * 
 	 * @param length the number of bytes in the buffer.
 	 */
 	public FillBuffer(long length) {
@@ -44,6 +46,7 @@ class FillBuffer extends AbstractSpanBuffer {
 
 	/**
 	 * Constructor
+	 * 
 	 * @param length the number of bytes in the buffer.
 	 * @param offset the offset for the buffer.
 	 */
@@ -84,8 +87,7 @@ class FillBuffer extends AbstractSpanBuffer {
 	@Override
 	public byte read(long position) throws IOException {
 		if (position > getEnd()) {
-			throw new IOException(
-					String.format("Position %s is past the end of the buffer (%s)", position, getEnd()));
+			throw new IOException(String.format("Position %s is past the end of the buffer (%s)", position, getEnd()));
 		}
 		return (byte) 0;
 	}
@@ -94,6 +96,16 @@ class FillBuffer extends AbstractSpanBuffer {
 	public int read(long position, byte[] buff, int pos, int len) {
 		Arrays.fill(buff, pos, len, (byte) 0);
 		return len;
+	}
+
+	@Override
+	public int read(long position, ByteBuffer buff) {
+		try {
+			return buff.remaining();
+		} finally {
+			buff.position(buff.limit());
+		}
+
 	}
 
 	@Override

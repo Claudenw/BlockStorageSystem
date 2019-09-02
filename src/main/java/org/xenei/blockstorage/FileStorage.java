@@ -44,21 +44,21 @@ public class FileStorage implements Storage {
 	private final static int DEFAULT_BLOCK_SIZE = 2 * 1024;
 
 	private RandomAccessFile file;
-	
+
 	/**
-	 * The free blocks in a SpanBuffer structure with block
-	 * add and remove functionality.
+	 * The free blocks in a SpanBuffer structure with block add and remove
+	 * functionality.
 	 */
 	private FreeBuffer freeBuffer;
 	/**
-	 * An output stream that always writes at the current file
-	 * location.
+	 * An output stream that always writes at the current file location.
 	 */
 	private OutputStream fileStream;
 	private Stats stats;
 
 	/**
 	 * Constructor
+	 * 
 	 * @param fileName The name of the file to process
 	 * @throws IOException on error
 	 */
@@ -128,37 +128,34 @@ public class FileStorage implements Storage {
 
 	/**
 	 * copies data from a walker into the file stream.
+	 * 
 	 * @param walker the walker to read from.
-	 * @param len the maximum number of bytes to write.
+	 * @param len    the maximum number of bytes to write.
 	 * @param buffer the buffer to write with.
 	 * @return the number of bytes writen.
 	 * @throws IOException
 	 */
-	private void fillBlock( Walker walker, long len, byte[] buffer) throws IOException
-	{
+	private void fillBlock(Walker walker, long len, byte[] buffer) throws IOException {
 		long bytesCopied = 0;
-		int limit = (int) Long.min(len, buffer.length );
+		int limit = (int) Long.min(len, buffer.length);
 		int bytesRead = 0;
-		while (walker.hasCurrent() && limit>0)
-		{
-			if (limit > buffer.length)
-			{
+		while (walker.hasCurrent() && limit > 0) {
+			if (limit > buffer.length) {
 				bytesRead = walker.read(buffer);
 			} else {
 				bytesRead = walker.read(buffer, 0, limit);
 			}
-			fileStream.write( buffer, 0, bytesRead );
+			fileStream.write(buffer, 0, bytesRead);
 			bytesCopied += bytesRead;
 		}
-		if (bytesCopied < len)
-		{
-			try (InputStream in =new FillBuffer( len-bytesCopied ).getInputStream())
-			{
-				IOUtils.copyLarge( in, fileStream, buffer );
+		if (bytesCopied < len) {
+			try (InputStream in = new FillBuffer(len - bytesCopied).getInputStream()) {
+				IOUtils.copyLarge(in, fileStream, buffer);
 			}
 		}
 
 	}
+
 	/**
 	 * write the free blocks to the file.
 	 */
@@ -170,15 +167,14 @@ public class FileStorage implements Storage {
 		header.read(0);
 		// file stream is now positiond at header data block
 		Walker walker = freeBuffer.getWalker();
-		fillBlock( walker, header.getDataSpan().getLength(), buffer);
-		
-		
+		fillBlock(walker, header.getDataSpan().getLength(), buffer);
+
 		/* The first block is now full so write any remaining data */
-		
+
 		while (walker.hasCurrent()) {
 			if (header.nextBlock != 0) {
 				header.read(header.nextBlock);
-				fillBlock( walker, header.getDataSpan().getLength(), buffer);
+				fillBlock(walker, header.getDataSpan().getLength(), buffer);
 			} else {
 				header.nextBlock = file.length();
 				header.write();
@@ -186,7 +182,7 @@ public class FileStorage implements Storage {
 				header.nextBlock = 0;
 				header.buffUsed = walker.remaining();
 				header.write();
-				fillBlock( walker, header.getDataSpan().getLength(), buffer);
+				fillBlock(walker, header.getDataSpan().getLength(), buffer);
 			}
 		}
 
@@ -195,8 +191,7 @@ public class FileStorage implements Storage {
 			header.read(header.nextBlock);
 			header.buffUsed = 0;
 			header.write();
-			try (InputStream is = new FillBuffer(header.getDataSpan().getLength()).getInputStream())
-			{
+			try (InputStream is = new FillBuffer(header.getDataSpan().getLength()).getInputStream()) {
 				IOUtils.copyLarge(is, fileStream);
 			}
 		}
@@ -381,7 +376,7 @@ public class FileStorage implements Storage {
 	}
 
 	/**
-	 * A block header.  Each block has a header as the first set of data.
+	 * A block header. Each block has a header as the first set of data.
 	 *
 	 */
 	private class BlockHeader {
@@ -392,6 +387,7 @@ public class FileStorage implements Storage {
 
 		/**
 		 * Reat the header at the specified offset.
+		 * 
 		 * @param offset the offset to read the header from.
 		 * @throws IOException on error.
 		 */
@@ -404,6 +400,7 @@ public class FileStorage implements Storage {
 
 		/**
 		 * Write the block back to the file.
+		 * 
 		 * @throws IOException on error.
 		 */
 		public void write() throws IOException {
@@ -414,8 +411,9 @@ public class FileStorage implements Storage {
 		}
 
 		/**
-		 * Get the span of the data in this block.  This is the block location and 
-		 * length minus the header.
+		 * Get the span of the data in this block. This is the block location and length
+		 * minus the header.
+		 * 
 		 * @return the span for the data in this block.
 		 */
 		public LongSpan getDataSpan() {
@@ -432,6 +430,7 @@ public class FileStorage implements Storage {
 
 		/**
 		 * Create a limited input stream
+		 * 
 		 * @param limit the limit
 		 */
 		public LimitedInputStream(int limit) {
@@ -469,7 +468,7 @@ public class FileStorage implements Storage {
 	 * Stats implementation for FileStorage.
 	 */
 	public class StatsImpl implements Stats {
-		
+
 		@Override
 		public long dataLength() {
 			try {

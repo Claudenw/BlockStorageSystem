@@ -15,33 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.xenei.blockstorage;
-
 /**
- * Statistics for the storage system.
- *
+ * Classes used by memory mapped storage to read read big blocks of data.
  */
-public interface Stats {
-
-	/**
-	 * The number of bytes occupied by all the data + free space.
-	 * 
-	 * @return the total length of the storage.
-	 */
-	long dataLength();
-
-	/**
-	 * Number of deleted blocks.
-	 * 
-	 * @return the number of deleted blocks.
-	 */
-	long deletedBlocks();
-
-	/**
-	 * The number of bytes accounted for in the deleted blocks.
-	 * 
-	 * @return the number of free bytes.
-	 */
-	long freeSpace();
-
-}
+package org.xenei.blockstorage.memorymapped;
