@@ -17,5 +17,14 @@
  */
 /**
  * Classes used by memory mapped storage to read read big blocks of data.
+ * 
+ * There are two basic memory mapped structures:
+ * <ol>
+ * <li>The free list which is a forward linked list of pages (buffers) containing longs 
+ * that are the offsets for the free blocks on the file system.  The froward links
+ * between pages of offsets are specified in the BlockHeader.nextBlock().</li>
+ * 
+ * <li>The data structures which are lazy loaded SpanBuffer trees.</li>
+ * </ol>
  */
 package org.xenei.blockstorage.memorymapped;

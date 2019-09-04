@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.xenei.blockstorage.memorymapped;
 
 import java.io.DataInputStream;
@@ -23,7 +40,8 @@ import org.xenei.spanbuffer.lazy.tree.serde.TreeDeserializer;
 import org.xenei.spanbuffer.lazy.tree.serde.TreeSerializer;
 
 /**
- * The Serde for the MemoryMapped free list.
+ * A Portmanteau of the a Buffer Factory, Serializer, and Deserializer
+ * that are used for the implementation.
  *
  */
 public class MMSerde extends AbstractSerde<MMPosition> {
@@ -90,7 +108,7 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 	}
 
 	/**
-	 * Serializer for Positions.
+	 * The Serializer
 	 *
 	 */
 	static class MMSerializer implements TreeSerializer<MMPosition> {
@@ -121,6 +139,7 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 			 * the underlying system. We just need to extract the MMPosition informtion.
 			 */
 			BlockHeader header = new BlockHeader(buffer);
+			header.buffUsed( buffer.position() );
 			LOG.debug( "Serializing {}", header );
 			if (header.offset() == 0)
 			{
@@ -176,7 +195,7 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 	}
 	
 	/**
-	 * The deserializer.
+	 * The Deserializer.
 	 */
 	private static class MMDeserializer implements TreeDeserializer<MMPosition> {
 		private final MMBufferFactory factory;
@@ -199,13 +218,18 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 				return ByteBuffer.allocate(0);
 			}
 			LOG.debug( "Deserializing {}", position);
-			factory.readBuffer(position);
 			ByteBuffer buffer = factory.readBuffer(position);
 			BlockHeader header = new BlockHeader(buffer);
 			LOG.debug( "Deserialized {} from {}", header, position);
 			if (header.offset() != position.offset())
 			{
-				String msg = String.format( "Read block %s from position %s", header, position);
+				String msg = String.format( "Block header %s and position %s do not match.", header, position);
+				LOG.error( msg );
+				throw new IllegalStateException( msg );
+			}
+			if (header.buffUsed() == 0)
+			{
+				String msg = String.format( "Read block %s with zero length from position %s", header, position);
 				LOG.error( msg );
 				throw new IllegalStateException( msg );
 			}
@@ -281,7 +305,7 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 	}
 	
 	/**
-	 * The buffer factory.
+	 * The Buffer Factory.
 	 *
 	 */
 	private static class MMBufferFactory implements BufferFactory {

@@ -35,6 +35,7 @@ import org.xenei.blockstorage.memorymapped.MMPosition;
 import org.xenei.blockstorage.memorymapped.MMSerde;
 import org.xenei.spanbuffer.Factory;
 import org.xenei.spanbuffer.SpanBuffer;
+import org.xenei.spanbuffer.lazy.LazyLoadedBuffer;
 
 /**
  * A memory mapped storage implementation. Reads and write the the file via
@@ -138,7 +139,7 @@ public class MemoryMappedStorage implements Storage {
 
 	@Override
 	public SpanBuffer read(long offset) throws IOException {
-		return Factory.wrap(serde.getDeserializer().deserialize(new MMPosition(offset)));
+		return new LazyLoadedBuffer(serde.getLazyLoader(new MMPosition(offset)));
 	}
 
 	@Override

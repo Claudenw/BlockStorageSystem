@@ -1,16 +1,33 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.xenei.blockstorage.memorymapped;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.xenei.blockstorage.MemoryMappedStorage;
 
 /**
- * A free node on the free list.
- *
+ * A free node on the free list.  This tracks the information
+ * concerning a single buffer full of free nodes on the list by
+ * extending the BlockHeader to add next block and block count 
+ * information to the header.
  */
 public class FreeNode extends BlockHeader {
 	
@@ -20,7 +37,6 @@ public class FreeNode extends BlockHeader {
 	static final int DATA_OFFSET = COUNT_OFFSET + Integer.BYTES;
 	/* package private for testing */
 	static final int DATA_SIZE = MemoryMappedStorage.BLOCK_SIZE - DATA_OFFSET;
-	private static final Logger LOG = LoggerFactory.getLogger( FreeNode.class );
 
 	/**
 	 * Constructor.
@@ -39,7 +55,6 @@ public class FreeNode extends BlockHeader {
 	public final LongBuffer getFreeRecords() {
 		return getBuffer().position(DATA_OFFSET).asLongBuffer();
 	}
-
 
 	/**
 	 * return true if this node only contains the header info.
@@ -65,7 +80,6 @@ public class FreeNode extends BlockHeader {
 		getBuffer().putLong(NEXT_BLOCK_OFFSET, offset);
 	}
 
-
 	/**
 	 * Set the total number of records in the buffer.
 	 * @param count
@@ -73,6 +87,7 @@ public class FreeNode extends BlockHeader {
 	public final void count(int count) {
 		getBuffer().putInt(COUNT_OFFSET, count);
 	}
+	
 	/**
 	 * Get the total number of records in the buffer.
 	 * @return the total number of used bytes.
@@ -87,5 +102,4 @@ public class FreeNode extends BlockHeader {
 				offset(), buffUsed(), getBuffer().limit(), getBuffer().capacity(), count());
 	}
 
-	
 }
