@@ -20,4 +20,8 @@ public class MMPosition implements Position {
 		return offset;
 	}
 
+	@Override
+	public String toString() {
+		return Long.toString(offset);
+	}
 }

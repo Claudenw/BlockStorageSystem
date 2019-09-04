@@ -8,74 +8,63 @@ import java.nio.channels.FileChannel.MapMode;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.xenei.blockstorage.MemoryMappedStorage;
 
-public class MMFreeList implements FreeNode {
+public class MMFreeList extends FreeNode {
 
-	private final List<InnerNode> pages;
-	private final BlockHeader root;
-	private final FileChannel fileChannel;
+	/* package private for testing */
+	final List<FreeNode> pages;
+	private final BufferFactory bufferFactory;
+	private final static Logger LOG = LoggerFactory.getLogger(MMFreeList.class); 
 
-	private static final int NEXT_BLOCK_OFFSET = BlockHeader.HEADER_SIZE;
-	private static final int COUNT_OFFSET = NEXT_BLOCK_OFFSET + Long.BYTES;;
-	private static final int DATA_OFFSET = COUNT_OFFSET + Integer.BYTES;
-	private static final int DATA_SIZE = MemoryMappedStorage.BLOCK_SIZE - DATA_OFFSET;
+	/**
+	 * Constructor.
+	 * @param fileChannel The file channel to use.
+	 * @throws IOException on error.
+	 */
+	public MMFreeList(FileChannel fileChannel) throws IOException {
+		this(new FileListBufferFactory( fileChannel));
+	}
+	
+	/** TESTING ONLY 
+	 * @throws IOException on error. 
+	 **/
+	MMFreeList( BufferFactory factory) throws IOException {
+		super( factory.readBuffer(0) );
+		this.pages = new ArrayList<FreeNode>();
 
-	public MMFreeList(FileChannel fileChannel, BlockHeader root) throws IOException {
-		this.pages = new ArrayList<InnerNode>();
-		this.root = root;
-		this.fileChannel = fileChannel;
+		this.bufferFactory = factory;
 		long nextBlock = this.nextBlock();
-		if (nextBlock != 0) {
-			InnerNode node = new InnerNode(
-					fileChannel.map(MapMode.READ_WRITE, nextBlock, MemoryMappedStorage.BLOCK_SIZE));
+		if (nextBlock > 0) {
+			FreeNode node = new FreeNode( factory.readBuffer( nextBlock ) );
 			pages.add(node);
 			nextBlock = node.nextBlock();
 		}
+		
 	}
 
-	@Override
-	public BlockHeader header() {
-		return root;
-	}
-
+	/**
+	 * Get the number of blocks in the free list.
+	 * @return the number of blocks in the free list.
+	 */
 	public int blockCount() {
-		return localCount() + pages.stream().mapToInt(InnerNode::localCount).sum();
+		return count() + pages.stream().mapToInt(FreeNode::count).sum();
 	}
 
-	@Override
-	public int localCount() {
-		return root.getBuffer().getInt(COUNT_OFFSET);
-	}
-
-	@Override
-	public void localCount(int count) {
-		root.getBuffer().putInt(COUNT_OFFSET, count);
-	}
-
-	@Override
-	public boolean isEmpty() {
-		return root.getBuffer().getInt(COUNT_OFFSET) > 0;
-	}
-
+	/**
+	 * The number of bytes represented by all the blocks on the free list.
+	 * @return the number of free bytes available.
+	 */
 	public long freeSpace() {
-		return blockCount() * (long) DATA_SIZE;
+		return blockCount() * (long) MemoryMappedStorage.BLOCK_SIZE;
 	}
 
-	private long nextBlock() {
-		return root.getBuffer().getLong(NEXT_BLOCK_OFFSET);
-	}
-
-	@Override
-	public void nextBlock(long offset) {
-		root.getBuffer().putLong(NEXT_BLOCK_OFFSET, offset);
-	}
-
-	@Override
-	public LongBuffer getData() {
-		return root.getBuffer().position(DATA_OFFSET).asLongBuffer();
-	}
-
+	/**
+	 * Get the next free block from the list.
+	 * @return the offset of the next block or null if no blocks are available.
+	 */
 	public Long getBlock() {
 		FreeNode freeNode = null;
 		if (pages.isEmpty()) {
@@ -96,18 +85,23 @@ public class MMFreeList implements FreeNode {
 					FreeNode prev = pages.get(idx);
 					prev.nextBlock(0);
 				}
-				return freeNode.header().offset();
+				return freeNode.offset();
 			}
 		}
-		LongBuffer lb = freeNode.getData();
-		int pos = freeNode.localCount();
+		LongBuffer lb = freeNode.getFreeRecords();
+		int pos = freeNode.count()-1;
 		long retval = lb.get(pos);
+		freeNode.count(pos);
 		lb.put(pos, 0L);
-		freeNode.localCount(pos - 1);
-		freeNode.header().buffUsed(freeNode.header().buffUsed() - Long.BYTES);
+		freeNode.buffUsed(freeNode.buffUsed() - Long.BYTES);
 		return retval;
 	}
 
+	/**
+	 * Add the offset to the list of free nodes.
+	 * @param offset the offset to add.
+	 * @throws IOException on error
+	 */
 	public void add(Long offset) throws IOException {
 		FreeNode freeNode = null;
 		if (pages.isEmpty()) {
@@ -115,62 +109,78 @@ public class MMFreeList implements FreeNode {
 		} else {
 			freeNode = pages.get(pages.size() - 1);
 		}
-		LongBuffer lb = freeNode.getData();
+		LongBuffer lb = freeNode.getFreeRecords();
 		int max = lb.capacity();
-		if (max == freeNode.localCount()) {
-			InnerNode node = new InnerNode(
-					fileChannel.map(MapMode.READ_WRITE, fileChannel.size(), MemoryMappedStorage.BLOCK_SIZE));
-			node.header().clearData();
-			freeNode.nextBlock(node.header().offset());
+		if (max == freeNode.count()) {
+			FreeNode node = new FreeNode( bufferFactory.createBuffer() );
+			node.clearData();
+			freeNode.nextBlock(node.offset());
 			pages.add(node);
-			node.localCount(0);
-			node.header.buffUsed(0);
+			node.count(0);
+			node.buffUsed(0);
 			freeNode = node;
+			lb = freeNode.getFreeRecords();
 		}
-		freeNode.localCount(freeNode.localCount() + 1);
-		freeNode.getData().put(freeNode.localCount(), offset);
-		freeNode.header().buffUsed(freeNode.header().buffUsed() + Long.BYTES);
+		lb.put(freeNode.count(), offset);
+		freeNode.count(freeNode.count() + 1);
+		freeNode.buffUsed(freeNode.buffUsed() + Long.BYTES);
+	}
+	
+	@Override
+	public String toString() {
+		return String.format( "FL[ o:%s u:%s l:%s c:%s fc:%s]", offset(), buffUsed(), getBuffer().limit(), getBuffer().capacity(), count());
 	}
 
-	private class InnerNode implements FreeNode {
-		private BlockHeader header;
+	/**
+	 * The buffer factory fo the free list.
+	 *
+	 */
+	public interface BufferFactory {
+		/**
+		 * Create a buffer.
+		 * @return the new byte buffer.
+		 * @throws IOException on error.
+		 */
+		ByteBuffer createBuffer() throws IOException;
+		
+		/**
+		 * Read a specific buffer.
+		 * @param offset the buffer to read.
+		 * @return the read buffer.
+		 * @throws IOException on error.
+		 */
+		ByteBuffer readBuffer(long offset) throws IOException;
+	}
+	
+	/**
+	 * The BufferFactory for the MMFreeList.
+	 *
+	 */
+	private static class FileListBufferFactory implements BufferFactory {
+		
+		private final FileChannel fileChannel;
 
-		InnerNode(ByteBuffer buffer) throws IOException {
-			this.header = new BlockHeader(buffer);
+		/**
+		 * Constructor.
+		 * @param fileChannel the file channel to use.
+		 */
+		FileListBufferFactory(FileChannel fileChannel)
+		{
+			this.fileChannel = fileChannel;
+			
 		}
 
 		@Override
-		public BlockHeader header() {
-			return header;
+		public ByteBuffer createBuffer() throws IOException {
+			LOG.debug( "Creating buffer at {}", fileChannel.size());
+			return fileChannel.map(MapMode.READ_WRITE, fileChannel.size(), MemoryMappedStorage.BLOCK_SIZE);
 		}
 
 		@Override
-		public boolean isEmpty() {
-			return header.getBuffer().getInt(COUNT_OFFSET) > 0;
+		public ByteBuffer readBuffer(long offset) throws IOException {
+			LOG.debug( "Reading buffer at {}", offset );
+			return fileChannel.map(MapMode.READ_WRITE, offset, MemoryMappedStorage.BLOCK_SIZE);
 		}
-
-		@Override
-		public int localCount() {
-			return header.getBuffer().getInt(COUNT_OFFSET);
-		}
-
-		@Override
-		public void localCount(int count) {
-			header.getBuffer().putInt(COUNT_OFFSET, count);
-		}
-
-		private long nextBlock() {
-			return header.getBuffer().getLong(NEXT_BLOCK_OFFSET);
-		}
-
-		@Override
-		public void nextBlock(long offset) {
-			header.getBuffer().putLong(NEXT_BLOCK_OFFSET, offset);
-		}
-
-		@Override
-		public LongBuffer getData() {
-			return header.getBuffer().position(DATA_OFFSET).asLongBuffer();
-		}
+		
 	}
 }

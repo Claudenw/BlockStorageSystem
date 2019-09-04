@@ -11,11 +11,11 @@ import org.xenei.blockstorage.MemoryMappedStorage;
  */
 public class BlockHeader {
 	private static byte[] CLEAN_BUFFER;
-	public static final int HEADER_SIZE = 2 * Long.BYTES + Integer.BYTES;
+	// integer at end of header size is accounted for in FreeNode 
+	public static final int HEADER_SIZE = 2 * Long.BYTES + Integer.SIZE;
 	public static final int BLOCK_SPACE = MemoryMappedStorage.BLOCK_SIZE - HEADER_SIZE;
 	private static final int OFFSET_OFFSET = 0;
 	private static final int USED_OFFSET = OFFSET_OFFSET + Long.BYTES;
-	// private static final int NEXT_OFFSET = USED_OFFSET + Integer.BYTES;
 
 	private final ByteBuffer buffer;
 
@@ -242,14 +242,27 @@ public class BlockHeader {
 //			writeFreeBlocks();
 //		}
 //	}
+	
+	@Override
+	public String toString() {
+		return String.format( "H[ o:%s u:%s l:%s c:%s]", offset(), buffUsed(), buffer.limit(), buffer.capacity());
+	}
 
 	public void clear() {
 		buffer.position(0);
-		buffer.put(CLEAN_BUFFER);
+		doClear();
+	}
+	
+	private void doClear() {
+		while (buffer.hasRemaining())
+		{
+			int limit = Integer.min(buffer.remaining(), MemoryMappedStorage.BLOCK_SIZE);
+			buffer.put(CLEAN_BUFFER, 0, limit);
+		}
 	}
 
 	public void clearData() {
 		buffer.position(HEADER_SIZE);
-		buffer.put(CLEAN_BUFFER, 0, BLOCK_SPACE);
+		doClear();
 	}
 }

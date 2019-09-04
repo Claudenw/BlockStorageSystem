@@ -26,13 +26,13 @@ import java.io.Serializable;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileChannel.MapMode;
+
+import org.apache.commons.io.IOUtils;
 import org.xenei.blockstorage.memorymapped.BlockHeader;
-import org.xenei.blockstorage.memorymapped.MMBufferFactory;
-import org.xenei.blockstorage.memorymapped.MMDeserializer;
 import org.xenei.blockstorage.memorymapped.MMFreeList;
 import org.xenei.blockstorage.memorymapped.MMOutputStream;
 import org.xenei.blockstorage.memorymapped.MMPosition;
-import org.xenei.blockstorage.memorymapped.MMSerializer;
+import org.xenei.blockstorage.memorymapped.MMSerde;
 import org.xenei.spanbuffer.Factory;
 import org.xenei.spanbuffer.SpanBuffer;
 
@@ -48,9 +48,7 @@ public class MemoryMappedStorage implements Storage {
 	private FileChannel fileChannel;
 	private MMFreeList freeList;
 	private Stats stats;
-	private MMSerializer serializer;
-	private MMDeserializer deserializer;
-	private MMBufferFactory factory;
+	private MMSerde serde;
 
 	/**
 	 * Constructor.
@@ -69,15 +67,13 @@ public class MemoryMappedStorage implements Storage {
 		}
 		RandomAccessFile file = new RandomAccessFile(fileName, "rw");
 		fileChannel = file.getChannel();
-		MappedByteBuffer mBuffer = fileChannel.map(MapMode.READ_WRITE, 0, BLOCK_SIZE).position(0);
-		BlockHeader header = new BlockHeader(mBuffer);
 		if (clearBlock) {
+			MappedByteBuffer mBuffer = fileChannel.map(MapMode.READ_WRITE, 0, BLOCK_SIZE);
+			BlockHeader header = new BlockHeader(mBuffer);
 			header.clear();
 		}
-		freeList = new MMFreeList(fileChannel, header);
-		factory = new MMBufferFactory(freeList, fileChannel);
-		serializer = new MMSerializer(factory, freeList);
-		deserializer = new MMDeserializer(fileChannel, freeList);
+		freeList = new MMFreeList(fileChannel);
+		serde = new MMSerde(freeList, fileChannel);
 		stats = new StatsImpl();
 	}
 
@@ -96,29 +92,10 @@ public class MemoryMappedStorage implements Storage {
 		write(BLOCK_SIZE, buffer);
 	}
 
-//	private void syncFree(byte[] buff) throws IOException {
-//		BlockHeader header = new BlockHeader(0);
-//		Walker walker = freeBuffer.getWalker();
-//		header.write( walker, buff );
-//		while (walker.hasCurrent() && header.nextBlock() != 0)
-//		{
-//			header = new BlockHeader( header.nextBlock());
-//			header.write( walker, buff );
-//		}
-//		if (walker.hasCurrent()) {
-//			BlockHeader next = append(walker, buff);
-//			header.nextBlock( next.blockInfo.getOffset() );
-//		}
-//		while (header.nextBlock() != 0) {
-//			header = new BlockHeader( header.nextBlock() );
-//			header.clear();
-//		}
-//	}
-
 	@Override
 	public void write(long pos, Serializable s) throws IOException {
 
-		try (MMOutputStream tos = new MMOutputStream(pos, serializer, factory);
+		try (MMOutputStream tos = new MMOutputStream(pos, serde);
 				ObjectOutputStream oos = new ObjectOutputStream(tos)) {
 			oos.writeObject(s);
 			oos.close();
@@ -127,7 +104,7 @@ public class MemoryMappedStorage implements Storage {
 
 	@Override
 	public void write(long pos, SpanBuffer spanBuffer) throws IOException {
-		try (MMOutputStream tos = new MMOutputStream(pos, serializer, factory);
+		try (MMOutputStream tos = new MMOutputStream(pos, serde);
 				ObjectOutputStream oos = new ObjectOutputStream(tos)) {
 			oos.writeObject(spanBuffer.getInputStream());
 			oos.close();
@@ -136,8 +113,7 @@ public class MemoryMappedStorage implements Storage {
 
 	@Override
 	public long append(Serializable s) throws IOException {
-		try (MMOutputStream tos = new MMOutputStream(serializer, factory);
-				ObjectOutputStream oos = new ObjectOutputStream(tos)) {
+		try (MMOutputStream tos = new MMOutputStream(serde); ObjectOutputStream oos = new ObjectOutputStream(tos)) {
 			oos.writeObject(s);
 			oos.close();
 			return ((MMPosition) tos.getPosition()).offset();
@@ -146,28 +122,12 @@ public class MemoryMappedStorage implements Storage {
 
 	@Override
 	public long append(SpanBuffer spanBuffer) throws IOException {
-		try (MMOutputStream tos = new MMOutputStream(serializer, factory);
-				ObjectOutputStream oos = new ObjectOutputStream(tos)) {
-			oos.writeObject(spanBuffer.getInputStream());
-			oos.close();
+		try (MMOutputStream tos = new MMOutputStream(serde)) {
+			IOUtils.copyLarge(spanBuffer.getInputStream(), tos);
+			tos.close();
 			return ((MMPosition) tos.getPosition()).offset();
 		}
 	}
-
-//	private BlockHeader append( Walker walker, byte[] buff ) throws IOException {
-//		
-//		long offset = fileChannel.size();
-//		long blockSize = Long.max(walker.remaining()+BlockHeader.HEADER_SIZE, BLOCK_SIZE);
-//		long dataLength = Long.max(walker.remaining(), BLOCK_SIZE-BlockHeader.HEADER_SIZE);
-//		MappedByteBuffer buffer= fileChannel.map(FileChannel.MapMode.READ_WRITE, offset, blockSize);
-//		buffer.putLong( dataLength );
-//		buffer.position(0);
-//		BlockHeader header = new BlockHeader( offset, buffer );
-//		header.buffUsed( walker.remaining() );
-//		header.fillBlock(walker, dataLength, buff);
-//		header.nextBlock( 0 );
-//		return header;
-//	}
 
 	@Override
 	public Serializable readObject(long pos) throws IOException, ClassNotFoundException {
@@ -178,12 +138,12 @@ public class MemoryMappedStorage implements Storage {
 
 	@Override
 	public SpanBuffer read(long offset) throws IOException {
-		return Factory.wrap(deserializer.deserialize(new MMPosition(offset)));
+		return Factory.wrap(serde.getDeserializer().deserialize(new MMPosition(offset)));
 	}
 
 	@Override
 	public void delete(long offset) throws IOException {
-		deserializer.delete(new MMPosition(offset));
+		serde.delete(new MMPosition(offset));
 	}
 
 	@Override
