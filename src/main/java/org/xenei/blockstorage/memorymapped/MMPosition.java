@@ -34,14 +34,13 @@ public class MMPosition implements Position {
 	/**
 	 * Constructor.
 	 * 
-	 * If the offset is specified as a negative position, the position
-	 * is set to indicate no data.
+	 * If the offset is specified as a negative position, the position is set to
+	 * indicate no data.
 	 * 
 	 * @param offset the file offset for the position.
 	 */
 	public MMPosition(long offset) {
-		if (offset < 0)
-		{
+		if (offset < 0) {
 			offset = -1;
 		}
 		this.offset = offset;
@@ -54,6 +53,7 @@ public class MMPosition implements Position {
 
 	/**
 	 * Get the file offset for this position.
+	 * 
 	 * @return the offset.
 	 */
 	public long offset() {

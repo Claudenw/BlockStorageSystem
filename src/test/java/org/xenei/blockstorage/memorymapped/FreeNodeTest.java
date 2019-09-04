@@ -21,10 +21,10 @@ public class FreeNodeTest {
 		LongBuffer lb = freeNode.getFreeRecords();
 
 		for (int i = 0; i < 10; i++) {
-			lb.put(i, (long) i);
+			lb.put(i, i);
 		}
 		for (int i = 0; i < 10; i++) {
-			assertEquals((long) i, lb.get(i));
+			assertEquals(i, lb.get(i));
 		}
 	}
 

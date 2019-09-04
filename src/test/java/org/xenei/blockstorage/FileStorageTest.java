@@ -10,7 +10,7 @@ import org.junit.Test;
 import org.xenei.spanbuffer.Factory;
 import org.xenei.spanbuffer.SpanBuffer;
 
-public class FileStorageTest  extends AbstractStorageTest {
+public class FileStorageTest extends AbstractStorageTest {
 
 	public FileStorageTest() {
 		File f = new File("/tmp/storage.test");
@@ -19,16 +19,18 @@ public class FileStorageTest  extends AbstractStorageTest {
 		}
 	}
 
+	@Override
 	@Before
 	public void setup() throws IOException {
-		System.setProperty( "org.slf4j.simpleLogger.defaultLogLevel", "debug" );
+		System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "debug");
 		storage = createStorage();
 	}
-	
+
+	@Override
 	public Storage createStorage() throws IOException {
 		return new FileStorage("/tmp/storage.test");
 	}
-	
+
 	@Test
 	public void test() throws IOException {
 

@@ -38,36 +38,40 @@ public class MMFreeList extends FreeNode {
 	/* package private for testing */
 	final List<FreeNode> pages;
 	private final BufferFactory bufferFactory;
-	private final static Logger LOG = LoggerFactory.getLogger(MMFreeList.class); 
+	private final static Logger LOG = LoggerFactory.getLogger(MMFreeList.class);
 
 	/**
 	 * Constructor.
+	 * 
 	 * @param fileChannel The file channel to use.
 	 * @throws IOException on error.
 	 */
 	public MMFreeList(FileChannel fileChannel) throws IOException {
-		this(new FileListBufferFactory( fileChannel));
+		this(new FileListBufferFactory(fileChannel));
 	}
-	
-	/** TESTING ONLY 
-	 * @throws IOException on error. 
+
+	/**
+	 * TESTING ONLY
+	 * 
+	 * @throws IOException on error.
 	 **/
-	MMFreeList( BufferFactory factory) throws IOException {
-		super( factory.readBuffer(0) );
+	MMFreeList(BufferFactory factory) throws IOException {
+		super(factory.readBuffer(0));
 		this.pages = new ArrayList<FreeNode>();
 
 		this.bufferFactory = factory;
 		long nextBlock = this.nextBlock();
 		if (nextBlock > 0) {
-			FreeNode node = new FreeNode( factory.readBuffer( nextBlock ) );
+			FreeNode node = new FreeNode(factory.readBuffer(nextBlock));
 			pages.add(node);
 			nextBlock = node.nextBlock();
 		}
-		
+
 	}
 
 	/**
 	 * Get the number of blocks in the free list.
+	 * 
 	 * @return the number of blocks in the free list.
 	 */
 	public int blockCount() {
@@ -76,6 +80,7 @@ public class MMFreeList extends FreeNode {
 
 	/**
 	 * The number of bytes represented by all the blocks on the free list.
+	 * 
 	 * @return the number of free bytes available.
 	 */
 	public long freeSpace() {
@@ -84,6 +89,7 @@ public class MMFreeList extends FreeNode {
 
 	/**
 	 * Get the next free block from the list.
+	 * 
 	 * @return the offset of the next block or null if no blocks are available.
 	 */
 	public Long getBlock() {
@@ -110,7 +116,7 @@ public class MMFreeList extends FreeNode {
 			}
 		}
 		LongBuffer lb = freeNode.getFreeRecords();
-		int pos = freeNode.count()-1;
+		int pos = freeNode.count() - 1;
 		long retval = lb.get(pos);
 		freeNode.count(pos);
 		lb.put(pos, 0L);
@@ -120,6 +126,7 @@ public class MMFreeList extends FreeNode {
 
 	/**
 	 * Add the offset to the list of free nodes.
+	 * 
 	 * @param offset the offset to add.
 	 * @throws IOException on error
 	 */
@@ -133,7 +140,7 @@ public class MMFreeList extends FreeNode {
 		LongBuffer lb = freeNode.getFreeRecords();
 		int max = lb.capacity();
 		if (max == freeNode.count()) {
-			FreeNode node = new FreeNode( bufferFactory.createBuffer() );
+			FreeNode node = new FreeNode(bufferFactory.createBuffer());
 			node.clearData();
 			freeNode.nextBlock(node.offset());
 			pages.add(node);
@@ -146,10 +153,11 @@ public class MMFreeList extends FreeNode {
 		freeNode.count(freeNode.count() + 1);
 		freeNode.buffUsed(freeNode.buffUsed() + Long.BYTES);
 	}
-	
+
 	@Override
 	public String toString() {
-		return String.format( "FL[ o:%s u:%s l:%s c:%s fc:%s]", offset(), buffUsed(), getBuffer().limit(), getBuffer().capacity(), count());
+		return String.format("FL[ o:%s u:%s l:%s c:%s fc:%s]", offset(), buffUsed(), getBuffer().limit(),
+				getBuffer().capacity(), count());
 	}
 
 	/**
@@ -159,49 +167,51 @@ public class MMFreeList extends FreeNode {
 	public interface BufferFactory {
 		/**
 		 * Create a buffer.
+		 * 
 		 * @return the new byte buffer.
 		 * @throws IOException on error.
 		 */
 		ByteBuffer createBuffer() throws IOException;
-		
+
 		/**
 		 * Read a specific buffer.
+		 * 
 		 * @param offset the buffer to read.
 		 * @return the read buffer.
 		 * @throws IOException on error.
 		 */
 		ByteBuffer readBuffer(long offset) throws IOException;
 	}
-	
+
 	/**
 	 * The BufferFactory for the MMFreeList.
 	 *
 	 */
 	private static class FileListBufferFactory implements BufferFactory {
-		
+
 		private final FileChannel fileChannel;
 
 		/**
 		 * Constructor.
+		 * 
 		 * @param fileChannel the file channel to use.
 		 */
-		FileListBufferFactory(FileChannel fileChannel)
-		{
+		FileListBufferFactory(FileChannel fileChannel) {
 			this.fileChannel = fileChannel;
-			
+
 		}
 
 		@Override
 		public ByteBuffer createBuffer() throws IOException {
-			LOG.debug( "Creating buffer at {}", fileChannel.size());
+			LOG.debug("Creating buffer at {}", fileChannel.size());
 			return fileChannel.map(MapMode.READ_WRITE, fileChannel.size(), MemoryMappedStorage.BLOCK_SIZE);
 		}
 
 		@Override
 		public ByteBuffer readBuffer(long offset) throws IOException {
-			LOG.debug( "Reading buffer at {}", offset );
+			LOG.debug("Reading buffer at {}", offset);
 			return fileChannel.map(MapMode.READ_WRITE, offset, MemoryMappedStorage.BLOCK_SIZE);
 		}
-		
+
 	}
 }

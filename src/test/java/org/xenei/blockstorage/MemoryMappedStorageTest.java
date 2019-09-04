@@ -35,13 +35,12 @@ public class MemoryMappedStorageTest extends AbstractStorageTest {
 		}
 
 	}
-	
-	
+
 	@Override
 	public Storage createStorage() throws IOException {
 		return new MemoryMappedStorage("/tmp/storage.test");
 	}
-	
+
 	@Test
 	public void test() throws IOException {
 

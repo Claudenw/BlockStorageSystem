@@ -25,10 +25,10 @@ import org.xenei.spanbuffer.lazy.tree.TreeOutputStream;
 import org.xenei.spanbuffer.lazy.tree.node.TreeNode;
 
 /**
- * A TreeOutputStream implementation the memory mapped data writing.
- * The difference between this implementation and the standard 
- * implementation is that this implementation the accepts a position
- * in which to place the root node of the tree.
+ * A TreeOutputStream implementation the memory mapped data writing. The
+ * difference between this implementation and the standard implementation is
+ * that this implementation the accepts a position in which to place the root
+ * node of the tree.
  *
  */
 public class MMOutputStream extends TreeOutputStream {
@@ -39,6 +39,7 @@ public class MMOutputStream extends TreeOutputStream {
 
 	/**
 	 * Constructor.
+	 * 
 	 * @param serde the MMSerde describing the storage.
 	 * @throws IOException on error.
 	 */
@@ -48,9 +49,9 @@ public class MMOutputStream extends TreeOutputStream {
 
 	/**
 	 * Constructor that writes to a specific location.
-	 * @param finalPosition the position where the root node will
-	 * be written.
-	 * @param serde the MMSerde describing the storage.
+	 * 
+	 * @param finalPosition the position where the root node will be written.
+	 * @param serde         the MMSerde describing the storage.
 	 * @throws IOException on error
 	 */
 	public MMOutputStream(long finalPosition, MMSerde serde) throws IOException {

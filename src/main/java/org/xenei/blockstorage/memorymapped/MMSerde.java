@@ -40,58 +40,60 @@ import org.xenei.spanbuffer.lazy.tree.serde.TreeDeserializer;
 import org.xenei.spanbuffer.lazy.tree.serde.TreeSerializer;
 
 /**
- * A Portmanteau of the a Buffer Factory, Serializer, and Deserializer
- * that are used for the implementation.
+ * A Portmanteau of the a Buffer Factory, Serializer, and Deserializer that are
+ * used for the implementation.
  *
  */
 public class MMSerde extends AbstractSerde<MMPosition> {
-	
+
 	private final MMBufferFactory factory;
 	private final MMSerializer serializer;
 	private final MMDeserializer deserializer;
-	
+
 	/**
 	 * Constructor.
-	 * @param freeList the free list.
+	 * 
+	 * @param freeList    the free list.
 	 * @param fileChannel the file channel.
 	 */
-	public MMSerde(MMFreeList freeList, FileChannel fileChannel)
-	{
-		this( new MMBufferFactory( fileChannel, freeList ));
+	public MMSerde(MMFreeList freeList, FileChannel fileChannel) {
+		this(new MMBufferFactory(fileChannel, freeList));
 	}
-	
+
 	/**
 	 * Constructor.
+	 * 
 	 * @param factory the factory
 	 */
-	private MMSerde( MMBufferFactory factory )
-	{
+	private MMSerde(MMBufferFactory factory) {
 		this.factory = factory;
-		this.serializer = new MMSerializer( factory, factory.freeList );
-		this.deserializer = new MMDeserializer( factory, factory.freeList );
+		this.serializer = new MMSerializer(factory, factory.freeList);
+		this.deserializer = new MMDeserializer(factory, factory.freeList);
 		verify();
 	}
-	
+
 	/**
 	 * Serialize in a specific position.
+	 * 
 	 * @param position the position to write to.
-	 * @param buffer the buffer to write.
+	 * @param buffer   the buffer to write.
 	 * @return position that was written to.
 	 * @throws IOException on error
 	 */
 	public MMPosition serialize(MMPosition position, ByteBuffer buffer) throws IOException {
 		return serializer.serialize(position, buffer);
 	}
-	
+
 	/**
 	 * Delete the specified position.
+	 * 
 	 * @param rootPosition the position to delete.
 	 * @throws IOException on error.
 	 */
 	public void delete(MMPosition rootPosition) throws IOException {
-		deserializer.delete( rootPosition );
+		deserializer.delete(rootPosition);
 	}
-	
+
 	@Override
 	public TreeDeserializer<MMPosition> getDeserializer() {
 		return deserializer;
@@ -119,7 +121,8 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 
 		/**
 		 * Constructor.
-		 * @param factory the factory to use.
+		 * 
+		 * @param factory  the factory to use.
 		 * @param freeList the free list.
 		 */
 		public MMSerializer(MMBufferFactory factory, MMFreeList freeList) {
@@ -139,11 +142,10 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 			 * the underlying system. We just need to extract the MMPosition informtion.
 			 */
 			BlockHeader header = new BlockHeader(buffer);
-			header.buffUsed( buffer.position() );
-			LOG.debug( "Serializing {}", header );
-			if (header.offset() == 0)
-			{
-				throw new IOException( "Can not serialize to buffer 0");
+			header.buffUsed(buffer.position());
+			LOG.debug("Serializing {}", header);
+			if (header.offset() == 0) {
+				throw new IOException("Can not serialize to buffer 0");
 			}
 			return new MMPosition(header.offset());
 		}
@@ -165,7 +167,7 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 			if (header.offset() == position.offset()) {
 				return serialize(buffer);
 			}
-			LOG.debug( "Serializing {} to {}", header, position );
+			LOG.debug("Serializing {} to {}", header, position);
 
 			buffer.position(BlockHeader.HEADER_SIZE);
 			ByteBuffer other = bufferFactory.readBuffer(position);
@@ -193,19 +195,20 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 		}
 
 	}
-	
+
 	/**
 	 * The Deserializer.
 	 */
 	private static class MMDeserializer implements TreeDeserializer<MMPosition> {
 		private final MMBufferFactory factory;
 		private final MMFreeList freeList;
-		private static final Logger LOG = LoggerFactory.getLogger( MMDeserializer.class );
+		private static final Logger LOG = LoggerFactory.getLogger(MMDeserializer.class);
 
 		/**
 		 * Constructor.
+		 * 
 		 * @param fileChannel the file channel to write on.
-		 * @param freeList The freelist to use.
+		 * @param freeList    The freelist to use.
 		 */
 		public MMDeserializer(MMBufferFactory factory, MMFreeList freeList) {
 			this.factory = factory;
@@ -217,35 +220,31 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 			if (position.isNoData()) {
 				return ByteBuffer.allocate(0);
 			}
-			LOG.debug( "Deserializing {}", position);
+			LOG.debug("Deserializing {}", position);
 			ByteBuffer buffer = factory.readBuffer(position);
 			BlockHeader header = new BlockHeader(buffer);
-			LOG.debug( "Deserialized {} from {}", header, position);
-			if (header.offset() != position.offset())
-			{
-				String msg = String.format( "Block header %s and position %s do not match.", header, position);
-				LOG.error( msg );
-				throw new IllegalStateException( msg );
+			LOG.debug("Deserialized {} from {}", header, position);
+			if (header.offset() != position.offset()) {
+				String msg = String.format("Block header %s and position %s do not match.", header, position);
+				LOG.error(msg);
+				throw new IllegalStateException(msg);
 			}
-			if (header.buffUsed() == 0)
-			{
-				String msg = String.format( "Read block %s with zero length from position %s", header, position);
-				LOG.error( msg );
-				throw new IllegalStateException( msg );
+			if (header.buffUsed() == 0) {
+				String msg = String.format("Read block %s with zero length from position %s", header, position);
+				LOG.error(msg);
+				throw new IllegalStateException(msg);
 			}
 			return buffer.position(BlockHeader.HEADER_SIZE).limit(header.buffUsed());
 		}
 
 		@Override
-		public List<TreeLazyLoader<MMPosition>> extractLoaders(SpanBuffer buffer)
-				throws IOException {
+		public List<TreeLazyLoader<MMPosition>> extractLoaders(SpanBuffer buffer) throws IOException {
 			List<TreeLazyLoader<MMPosition>> result = new ArrayList<TreeLazyLoader<MMPosition>>();
 			try (DataInputStream ois = new DataInputStream(buffer.getInputStream())) {
 				while (true) {
 					try {
 						int idx = ois.readInt();
-						TreeLazyLoader<MMPosition> tll = new TreeLazyLoader<MMPosition>(
-								new MMPosition(idx), this);
+						TreeLazyLoader<MMPosition> tll = new TreeLazyLoader<MMPosition>(new MMPosition(idx), this);
 						result.add(tll);
 					} catch (EOFException e) {
 						return result;
@@ -258,6 +257,7 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 
 		/**
 		 * Delete a specific position.
+		 * 
 		 * @param rootPosition the position to delete.
 		 * @throws IOException on error.
 		 */
@@ -265,23 +265,24 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 			if (rootPosition.isNoData()) {
 				return;
 			}
-			
+
 			ByteBuffer root = factory.readBuffer(rootPosition);
 			BlockHeader header = new BlockHeader(root);
 			byte bType = root.position(BlockHeader.HEADER_SIZE).get();
-			LOG.debug( "Deleting {} of type {}", header, bType );
+			LOG.debug("Deleting {} of type {}", header, bType);
 			/*
-			 * if root is not and Outer Node, we need to read buffer as series of long values and delete those before we delete the
-			 * root node. The nodes we read will be either INNER or LEAF nodes. 
+			 * if root is not and Outer Node, we need to read buffer as series of long
+			 * values and delete those before we delete the root node. The nodes we read
+			 * will be either INNER or LEAF nodes.
 			 */
-			
+
 			if (bType != InnerNode.OUTER_NODE_FLAG) {
 				LongBuffer lb = root.position(BlockHeader.HEADER_SIZE + 1).asLongBuffer();
 				long pos;
 				while (0 != (pos = lb.get())) {
-					MMPosition position = new MMPosition( pos );
+					MMPosition position = new MMPosition(pos);
 					if (bType == InnerNode.LEAF_NODE_FLAG) {
-						ByteBuffer leaf = factory.readBuffer( position);
+						ByteBuffer leaf = factory.readBuffer(position);
 						BlockHeader leafHeader = new BlockHeader(leaf);
 						leafHeader.clear();
 						freeList.add(pos);
@@ -303,7 +304,7 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 		}
 
 	}
-	
+
 	/**
 	 * The Buffer Factory.
 	 *
@@ -315,8 +316,9 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 
 		/**
 		 * Constructor.
+		 * 
 		 * @param fileChannel the file channel.
-		 * @param freeList the free list.
+		 * @param freeList    the free list.
 		 */
 		public MMBufferFactory(FileChannel fileChannel, MMFreeList freeList) {
 			this.freeList = freeList;
@@ -325,7 +327,7 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 
 		@Override
 		public int bufferSize() {
-			return BlockHeader.BLOCK_SPACE-BlockHeader.HEADER_SIZE;
+			return BlockHeader.BLOCK_SPACE - BlockHeader.HEADER_SIZE;
 		}
 
 		@Override
@@ -340,17 +342,20 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 				pos = fileChannel.size();
 			}
 
-			MappedByteBuffer mBuffer = fileChannel.map(MapMode.READ_WRITE, pos, MemoryMappedStorage.BLOCK_SIZE).position(0);
+			MappedByteBuffer mBuffer = fileChannel.map(MapMode.READ_WRITE, pos, MemoryMappedStorage.BLOCK_SIZE)
+					.position(0);
 			BlockHeader header = new BlockHeader(mBuffer);
 			header.clear();
 			header.offset(pos);
-			LOG.debug( "Creating buffer {}", header );
+			LOG.debug("Creating buffer {}", header);
 			return mBuffer.position(BlockHeader.HEADER_SIZE);
 		}
 
 		/**
 		 * Read a buffer.
-		 * @param position the position to read the buffer from, if position = -1 create new buffer.
+		 * 
+		 * @param position the position to read the buffer from, if position = -1 create
+		 *                 new buffer.
 		 * @return the read buffer.
 		 * @throws IOException on error.
 		 */
@@ -364,19 +369,19 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 
 		@Override
 		public void free(ByteBuffer buffer) throws IOException {
-			/* We don't do anything as we do not free the buffers
-			 * but let the tracking system handle it.
+			/*
+			 * We don't do anything as we do not free the buffers but let the tracking
+			 * system handle it.
 			 */
 			BlockHeader header = new BlockHeader(buffer);
 			long offset = header.offset();
 			LOG.debug("Freeing {}", header);
-			if (offset == 0)
-			{
-				throw new IOException( "Can not delete block 0");
+			if (offset == 0) {
+				throw new IOException("Can not delete block 0");
 			}
 			header.clear();
 			freeList.add(offset);
 		}
-		
+
 	}
 }

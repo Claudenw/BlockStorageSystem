@@ -23,18 +23,18 @@ import java.util.Arrays;
 import org.xenei.blockstorage.MemoryMappedStorage;
 
 /**
- * A block header is the first set of data in a block and is used by the
- * system to track it.
+ * A block header is the first set of data in a block and is used by the system
+ * to track it.
  *
- * The header contains the offset for the block, the number of bytes used
- * in the block.
+ * The header contains the offset for the block, the number of bytes used in the
+ * block.
  * 
  * The block is used both in the FreeList and in writing data.
  * 
  */
 public class BlockHeader {
 	private static byte[] CLEAN_BUFFER;
-	// integer at end of header size is accounted for in FreeNode 
+	// integer at end of header size is accounted for in FreeNode
 	public static final int HEADER_SIZE = 2 * Long.BYTES + Integer.SIZE;
 	public static final int BLOCK_SPACE = MemoryMappedStorage.BLOCK_SIZE - HEADER_SIZE;
 	private static final int OFFSET_OFFSET = 0;
@@ -90,10 +90,10 @@ public class BlockHeader {
 	public ByteBuffer getBuffer() {
 		return buffer;
 	}
-	
+
 	@Override
 	public String toString() {
-		return String.format( "H[ o:%s u:%s l:%s c:%s]", offset(), buffUsed(), buffer.limit(), buffer.capacity());
+		return String.format("H[ o:%s u:%s l:%s c:%s]", offset(), buffUsed(), buffer.limit(), buffer.capacity());
 	}
 
 	/**
@@ -103,21 +103,20 @@ public class BlockHeader {
 		buffer.position(0);
 		doClear();
 	}
-	
+
 	/**
 	 * Clear (fill with null) the buffer from the current position.
 	 */
 	private void doClear() {
-		while (buffer.hasRemaining())
-		{
+		while (buffer.hasRemaining()) {
 			int limit = Integer.min(buffer.remaining(), MemoryMappedStorage.BLOCK_SIZE);
 			buffer.put(CLEAN_BUFFER, 0, limit);
 		}
 	}
 
 	/**
-	 * Clear (fill with null) all user data in buffer.
-	 * This is all the data after the header. 
+	 * Clear (fill with null) all user data in buffer. This is all the data after
+	 * the header.
 	 */
 	public void clearData() {
 		buffer.position(HEADER_SIZE);

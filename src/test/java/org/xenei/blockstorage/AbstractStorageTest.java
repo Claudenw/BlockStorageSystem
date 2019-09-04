@@ -17,29 +17,20 @@
  */
 package org.xenei.blockstorage;
 
-import static org.junit.Assert.assertEquals;
-
 import java.io.IOException;
 
 import org.junit.Before;
-import org.junit.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.slf4j.impl.SimpleLogger;
-import org.xenei.spanbuffer.Factory;
-import org.xenei.spanbuffer.SpanBuffer;
 
 public abstract class AbstractStorageTest {
 
 	protected Storage storage;
-	
 
 	@Before
 	public void setup() throws IOException {
-		System.setProperty( "org.slf4j.simpleLogger.defaultLogLevel", "debug" );
+		System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "debug");
 		storage = createStorage();
 	}
-	
+
 	protected abstract Storage createStorage() throws IOException;
 
 }

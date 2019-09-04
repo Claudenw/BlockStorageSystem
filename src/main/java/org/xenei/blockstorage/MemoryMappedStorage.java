@@ -33,7 +33,6 @@ import org.xenei.blockstorage.memorymapped.MMFreeList;
 import org.xenei.blockstorage.memorymapped.MMOutputStream;
 import org.xenei.blockstorage.memorymapped.MMPosition;
 import org.xenei.blockstorage.memorymapped.MMSerde;
-import org.xenei.spanbuffer.Factory;
 import org.xenei.spanbuffer.SpanBuffer;
 import org.xenei.spanbuffer.lazy.LazyLoadedBuffer;
 
