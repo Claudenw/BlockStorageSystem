@@ -20,7 +20,11 @@ package org.xenei.blockstorage.memorymapped;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
+import java.util.Iterator;
+import java.util.NoSuchElementException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.xenei.blockstorage.MemoryMappedStorage;
 
 /**
@@ -29,7 +33,7 @@ import org.xenei.blockstorage.MemoryMappedStorage;
  * next block and block count information to the header.
  */
 public class FreeNode extends BlockHeader {
-
+	private static final Logger LOG = LoggerFactory.getLogger(FreeNode.class);
 	private static final int NEXT_BLOCK_OFFSET = BlockHeader.HEADER_SIZE;
 	private static final int COUNT_OFFSET = NEXT_BLOCK_OFFSET + Long.BYTES;;
 	/* package private for testing */
@@ -45,6 +49,7 @@ public class FreeNode extends BlockHeader {
 	 */
 	public FreeNode(ByteBuffer bb) throws IOException {
 		super(bb);
+		LOG.debug("Created FeeNode at {}", this.offset());
 	}
 
 	/**
@@ -107,4 +112,35 @@ public class FreeNode extends BlockHeader {
 				getBuffer().capacity(), count());
 	}
 
+	protected FreeRecordIterator getRecords() {
+		return new FreeRecordIterator();
+	}
+	
+	public class FreeRecordIterator implements Iterator<Long>
+	{
+		LongBuffer lb;
+		int pos;
+		
+		FreeRecordIterator() {
+			lb = getFreeRecords();
+		}
+
+		@Override
+		public boolean hasNext() {
+			return pos<lb.limit() && lb.get(pos) > 0;
+		}
+
+		@Override
+		public Long next() {
+			if (hasNext())
+			{
+				return lb.get(pos++);
+			}
+			throw new NoSuchElementException();
+		}
+		
+		
+		
+		
+	}
 }

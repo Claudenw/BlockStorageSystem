@@ -23,8 +23,13 @@ import java.nio.LongBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileChannel.MapMode;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.stream.Collectors;
 
+import org.apache.jena.util.iterator.WrappedIterator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xenei.blockstorage.MemoryMappedStorage;
@@ -57,17 +62,54 @@ public class MMFreeList extends FreeNode {
 	 **/
 	MMFreeList(BufferFactory factory) throws IOException {
 		super(factory.readBuffer(0));
+		LOG.debug( "Creating FreeList");
 		this.pages = new ArrayList<FreeNode>();
 
 		this.bufferFactory = factory;
 		long nextBlock = this.nextBlock();
 		if (nextBlock > 0) {
+			LOG.debug( "Reading next FreeNode {}", nextBlock );
 			FreeNode node = new FreeNode(factory.readBuffer(nextBlock));
 			pages.add(node);
 			nextBlock = node.nextBlock();
 		}
-
+		verify();
+		LOG.debug( "FreeList created");
 	}
+	
+	private void verify() {
+		
+		Set<Long> seen = new TreeSet<Long>();
+		List<Long> recs = WrappedIterator.create( getRecords() ).toList();
+		if ( recs.size() != count()) {
+			throw new IllegalStateException("Root count() does not equal records count");
+		}
+		
+		seen.addAll( recs );
+		if ( seen.size() != recs.size() ) {
+			throw new IllegalStateException("possible duplicate records in free list");
+		}
+		
+		for (int i = 0;i<pages.size();i++) {
+			FreeNode node = pages.get(i);
+			recs = WrappedIterator.create( node.getRecords() ).toList();
+			if ( recs.size() != node.count())
+			{
+				throw new IllegalStateException("Page "+i+" count() does not equal records count");
+				
+			}
+			int oldCount = seen.size();
+			seen.addAll( recs );
+			int newCount = seen.size() - oldCount;
+			if( newCount != recs.size() );
+			{
+				throw new IllegalStateException("possible duplicate records on page "+i+" in free list");
+			}
+			
+		}
+		LOG.info( "FreeList verified {} free nodes", seen.size());
+	} 
+
 
 	/**
 	 * Get the number of blocks in the free list.
@@ -77,6 +119,17 @@ public class MMFreeList extends FreeNode {
 	public int blockCount() {
 		return count() + pages.stream().mapToInt(FreeNode::count).sum();
 	}
+	
+	public Iterator<Long> getFreeBlocks() {
+		if (pages.isEmpty())
+		{
+		 return this.getRecords();
+		}
+		return WrappedIterator.create( this.getRecords() )
+		.andThen( WrappedIterator.createIteratorIterator( 
+				(Iterator<Iterator<Long>>) pages.stream().map( FreeNode::getRecords)));
+		
+	}      
 
 	/**
 	 * The number of bytes represented by all the blocks on the free list.
@@ -102,11 +155,13 @@ public class MMFreeList extends FreeNode {
 		} else {
 			int idx = pages.size() - 1;
 			freeNode = pages.get(idx);
+			// if the free node is empty use it as the next block
 			if (freeNode.isEmpty()) {
 				pages.remove(idx);
 				idx--;
+				// clear the next block pointer
 				if (idx < 0) {
-					// only page is empty
+					// only root page remains
 					this.nextBlock(0);
 				} else {
 					FreeNode prev = pages.get(idx);

@@ -28,6 +28,8 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.FileChannel.MapMode;
 
 import org.apache.commons.io.IOUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.xenei.blockstorage.memorymapped.BlockHeader;
 import org.xenei.blockstorage.memorymapped.MMFreeList;
 import org.xenei.blockstorage.memorymapped.MMOutputStream;
@@ -36,6 +38,7 @@ import org.xenei.blockstorage.memorymapped.MMSerde;
 import org.xenei.spanbuffer.SpanBuffer;
 import org.xenei.spanbuffer.lazy.LazyLoadedBuffer;
 
+
 /**
  * A memory mapped storage implementation. Reads and write the the file via
  * memory mapped blocks.
@@ -43,6 +46,7 @@ import org.xenei.spanbuffer.lazy.LazyLoadedBuffer;
  */
 public class MemoryMappedStorage implements Storage {
 
+	private final static Logger LOG = LoggerFactory.getLogger(MemoryMappedStorage.class);
 	public final static int BLOCK_SIZE = 2 * 1024;
 
 	private FileChannel fileChannel;
@@ -59,6 +63,7 @@ public class MemoryMappedStorage implements Storage {
 	@SuppressWarnings("resource")
 	public MemoryMappedStorage(String fileName) throws IOException {
 		boolean clearBlock = false;
+		LOG.debug( "Loading: {}", fileName );
 		File f = new File(fileName);
 
 		if (!f.exists()) {
@@ -68,6 +73,7 @@ public class MemoryMappedStorage implements Storage {
 		RandomAccessFile file = new RandomAccessFile(fileName, "rw");
 		fileChannel = file.getChannel();
 		if (clearBlock) {
+			LOG.debug("Clearing free list");
 			MappedByteBuffer mBuffer = fileChannel.map(MapMode.READ_WRITE, 0, BLOCK_SIZE);
 			BlockHeader header = new BlockHeader(mBuffer);
 			header.clear();
@@ -75,6 +81,7 @@ public class MemoryMappedStorage implements Storage {
 		freeList = new MMFreeList(fileChannel);
 		serde = new MMSerde(freeList, fileChannel);
 		stats = new StatsImpl();
+		LOG.info( "{} on startup {}", fileName, stats );
 	}
 
 	@Override
@@ -150,6 +157,7 @@ public class MemoryMappedStorage implements Storage {
 	public void close() throws IOException {
 		fileChannel.close();
 		freeList = null;
+		LOG.debug("Closed System");
 	}
 
 	/**

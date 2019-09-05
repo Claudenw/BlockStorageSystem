@@ -91,7 +91,7 @@ public class MemoryMappedStorageTest extends AbstractStorageTest {
 		assertEquals(4096, storage.stats().freeSpace());
 		assertEquals(2, storage.stats().deletedBlocks());
 
-		f = storage.read(first);
+		f = storage.read(third);
 		assertEquals("Hello again", f.getText());
 		assertEquals(10240, storage.stats().dataLength());
 		assertEquals(4096, storage.stats().freeSpace());

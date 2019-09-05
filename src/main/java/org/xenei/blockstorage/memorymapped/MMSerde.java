@@ -45,7 +45,7 @@ import org.xenei.spanbuffer.lazy.tree.serde.TreeSerializer;
  *
  */
 public class MMSerde extends AbstractSerde<MMPosition> {
-
+	private static final Logger LOG = LoggerFactory.getLogger(MMSerde.class);
 	private final MMBufferFactory factory;
 	private final MMSerializer serializer;
 	private final MMDeserializer deserializer;
@@ -66,10 +66,12 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 	 * @param factory the factory
 	 */
 	private MMSerde(MMBufferFactory factory) {
+		LOG.debug( "Creating MMSerde");
 		this.factory = factory;
 		this.serializer = new MMSerializer(factory, factory.freeList);
 		this.deserializer = new MMDeserializer(factory, factory.freeList);
 		verify();
+		LOG.debug( "Created MMSerde");
 	}
 
 	/**
@@ -169,13 +171,16 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 			}
 			LOG.debug("Serializing {} to {}", header, position);
 
-			buffer.position(BlockHeader.HEADER_SIZE);
+			buffer.position(0);
 			ByteBuffer other = bufferFactory.readBuffer(position);
+			other.position(0);
+			other.put( buffer );
 			BlockHeader oHeader = new BlockHeader(other);
 			other.position(BlockHeader.HEADER_SIZE);
 			other.put(buffer);
-			oHeader.buffUsed(header.buffUsed());
+			oHeader.offset( position.offset() );
 			freeList.add(header.offset());
+			LOG.debug("Serialized {} to {}", oHeader, position);
 			return position;
 		}
 
