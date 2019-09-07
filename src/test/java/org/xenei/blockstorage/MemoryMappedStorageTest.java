@@ -22,8 +22,11 @@ import static org.junit.Assert.fail;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
 
 import org.junit.Test;
+import org.xenei.blockstorage.memorymapped.BlockHeader;
 import org.xenei.spanbuffer.Factory;
 import org.xenei.spanbuffer.SpanBuffer;
 
@@ -118,4 +121,30 @@ public class MemoryMappedStorageTest extends AbstractStorageTest {
 
 	}
 
+	/**
+	 * An application that verifies the headers in a file.
+	 * 
+	 * @param args
+	 * @throws IOException
+	 */
+	public static void main(String[] args) throws IOException {
+		RandomAccessFile file = new RandomAccessFile("/tmp/storage.test", "r");
+		if ((file.length() % MemoryMappedStorage.BLOCK_SIZE) != 0) {
+			System.err.println("Not a proper block sized file");
+			System.exit(1);
+		}
+		byte[] buff = new byte[BlockHeader.HEADER_SIZE];
+		BlockHeader header = new BlockHeader(ByteBuffer.wrap(buff));
+		int limit = (int) file.length() / MemoryMappedStorage.BLOCK_SIZE;
+		for (int i = 0; i < limit; i++) {
+			file.seek(i * MemoryMappedStorage.BLOCK_SIZE);
+			file.read(buff);
+			System.out.println(String.format("%s: %s", i, header));
+			try {
+				header.verify(i * MemoryMappedStorage.BLOCK_SIZE);
+			} catch (IOException e) {
+				System.err.println(e.getMessage());
+			}
+		}
+	}
 }

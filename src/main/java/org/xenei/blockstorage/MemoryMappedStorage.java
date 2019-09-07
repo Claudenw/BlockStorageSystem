@@ -51,6 +51,7 @@ public class MemoryMappedStorage implements Storage {
 	private final MMBufferFactory factory;
 	private final Stats stats;
 	private final MMSerde serde;
+	private final RandomAccessFile file;
 
 	/**
 	 * Constructor.
@@ -58,7 +59,6 @@ public class MemoryMappedStorage implements Storage {
 	 * @param fileName the file to process.
 	 * @throws IOException on error.
 	 */
-	@SuppressWarnings("resource")
 	public MemoryMappedStorage(String fileName) throws IOException {
 		boolean clearBlock = false;
 		LOG.debug("Loading: {}", fileName);
@@ -68,13 +68,13 @@ public class MemoryMappedStorage implements Storage {
 			f.createNewFile();
 			clearBlock = true;
 		}
-		RandomAccessFile file = new RandomAccessFile(fileName, "rw");
+		file = new RandomAccessFile(fileName, "rw");
 		FileChannel fileChannel = file.getChannel();
 		if (clearBlock) {
 			LOG.debug("Clearing free list");
 			MappedByteBuffer mBuffer = fileChannel.map(MapMode.READ_WRITE, 0, BLOCK_SIZE);
 			BlockHeader header = new BlockHeader(mBuffer);
-			header.clear();
+			header.initialize(0);
 		}
 		factory = new MMBufferFactory(fileChannel);
 		serde = new MMSerde(factory);
@@ -157,6 +157,7 @@ public class MemoryMappedStorage implements Storage {
 	@Override
 	public void close() throws IOException {
 		factory.close();
+		file.close();
 		LOG.debug("Closed System");
 	}
 

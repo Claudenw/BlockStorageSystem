@@ -84,8 +84,7 @@ public class MMBufferFactory implements BufferFactory, MMFreeList.BufferFactory 
 
 		MappedByteBuffer mBuffer = fileChannel.map(MapMode.READ_WRITE, pos, MemoryMappedStorage.BLOCK_SIZE).position(0);
 		BlockHeader header = new BlockHeader(mBuffer);
-		header.clear();
-		header.offset(pos);
+		header.initialize(pos);
 		LOG.debug("Creating buffer {}", header);
 		return mBuffer.position(BlockHeader.HEADER_SIZE);
 	}
@@ -107,7 +106,7 @@ public class MMBufferFactory implements BufferFactory, MMFreeList.BufferFactory 
 		ByteBuffer buffer = fileChannel.map(MapMode.READ_WRITE, position.offset(), MemoryMappedStorage.BLOCK_SIZE)
 				.position(BlockHeader.HEADER_SIZE);
 		BlockHeader header = new BlockHeader(buffer);
-		header.verifySignature();
+		header.verify(position.offset());
 		return buffer;
 	}
 
@@ -127,9 +126,7 @@ public class MMBufferFactory implements BufferFactory, MMFreeList.BufferFactory 
 		if (header.is(BlockHeader.FREE_FLAG)) {
 			throw new IOException("Can not free an already free block");
 		}
-		header.clear();
-		header.sign();
-		header.setFlag(BlockHeader.FREE_FLAG);
+		header.free();
 		freeList.add(offset);
 	}
 

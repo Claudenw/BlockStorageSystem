@@ -54,8 +54,8 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 	public MMSerde(MMBufferFactory factory) {
 		LOG.debug("Creating MMSerde");
 		this.factory = factory;
-		this.serializer = new MMSerializer(factory);
-		this.deserializer = new MMDeserializer(factory);
+		this.serializer = new MMSerializer();
+		this.deserializer = new MMDeserializer();
 		verify();
 		LOG.debug("Created MMSerde");
 	}
@@ -101,20 +101,7 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 	 * The Serializer
 	 *
 	 */
-	static class MMSerializer implements TreeSerializer<MMPosition> {
-
-		private MMBufferFactory bufferFactory;
-		private static final Logger LOG = LoggerFactory.getLogger(MMSerializer.class);
-
-		/**
-		 * Constructor.
-		 * 
-		 * @param factory  the factory to use.
-		 * @param freeList the free list.
-		 */
-		public MMSerializer(MMBufferFactory factory) {
-			this.bufferFactory = factory;
-		}
+	private class MMSerializer implements TreeSerializer<MMPosition> {
 
 		@Override
 		public int getMaxBufferSize() {
@@ -133,6 +120,7 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 			if (header.offset() == 0) {
 				throw new IOException("Can not serialize to buffer 0");
 			}
+			header.flush();
 			return new MMPosition(header.offset());
 		}
 
@@ -156,14 +144,16 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 			LOG.debug("Serializing {} to {}", header, position);
 
 			buffer.position(0);
-			ByteBuffer other = bufferFactory.readBuffer(position);
+			ByteBuffer other = factory.readBuffer(position);
 			other.position(0);
 			other.put(buffer);
 			BlockHeader oHeader = new BlockHeader(other);
 			other.position(BlockHeader.HEADER_SIZE);
 			other.put(buffer);
 			oHeader.offset(position.offset());
-			bufferFactory.getFreeList().add(header.offset());
+			oHeader.flush();
+			delete(new MMPosition(header.offset()));
+			factory.getFreeList().add(header.offset());
 			LOG.debug("Serialized {} to {}", oHeader, position);
 			return position;
 		}
@@ -188,19 +178,12 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 	/**
 	 * The Deserializer.
 	 */
-	private static class MMDeserializer implements TreeDeserializer<MMPosition> {
-		private final MMBufferFactory factory;
-		private static final Logger LOG = LoggerFactory.getLogger(MMDeserializer.class);
+	private class MMDeserializer implements TreeDeserializer<MMPosition> {
 
 		/**
 		 * Constructor.
 		 * 
-		 * @param fileChannel the file channel to write on.
-		 * @param freeList    The freelist to use.
 		 */
-		public MMDeserializer(MMBufferFactory factory) {
-			this.factory = factory;
-		}
 
 		@Override
 		public ByteBuffer deserialize(MMPosition position) throws IOException {

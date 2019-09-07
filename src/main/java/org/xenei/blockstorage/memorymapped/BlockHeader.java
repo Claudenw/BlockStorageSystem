@@ -19,6 +19,7 @@ package org.xenei.blockstorage.memorymapped;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.MappedByteBuffer;
 import java.util.Arrays;
 
 import org.slf4j.Logger;
@@ -39,8 +40,8 @@ import org.xenei.spanbuffer.Factory;
 public class BlockHeader {
 	public static final byte FREE_FLAG = 0x1;
 	private static final Logger LOG = LoggerFactory.getLogger(BlockHeader.class);
-	private static int SIGNATURE_SIZE = 5;
-	private static ByteBuffer SIGNATURE = ByteBuffer.wrap(new byte[] { 0x0, (byte) 0xFF, 'B', 'H', 0x77 });
+	private static int SIGNATURE_SIZE = 7;
+	private static ByteBuffer SIGNATURE = ByteBuffer.wrap(new byte[] { '=', 'm', 'm', 'B', 'S', '=', 0x0 });
 	private static byte[] CLEAN_BUFFER;
 	// sig, status flag, file offset, used bytes
 	public static final int HEADER_SIZE = SIGNATURE_SIZE + 1 + Long.BYTES + Integer.SIZE;
@@ -68,6 +69,11 @@ public class BlockHeader {
 		this.buffer = buffer;
 	}
 
+	public void initialize(long pos) {
+		clear();
+		offset(pos);
+	}
+
 	/**
 	 * Mark the header as free. This operation clears all the buffer data and then
 	 * sets the FREE_FLAG and the offset. All other data is destroyed.
@@ -77,14 +83,21 @@ public class BlockHeader {
 		clear();
 		offset(pos);
 		setFlag(FREE_FLAG);
+		flush();
+	}
+
+	public void flush() {
+		if (buffer instanceof MappedByteBuffer) {
+			((MappedByteBuffer) buffer).force();
+		}
 	}
 
 	/**
 	 * Add the block signature to the block. Every block in the system should start
 	 * with the signature.
 	 */
-	public void sign() {
-		buffer.duplicate().position(0).put(SIGNATURE);
+	private void sign() {
+		buffer.duplicate().position(0).put(SIGNATURE.position(0));
 	}
 
 	/**
@@ -100,6 +113,13 @@ public class BlockHeader {
 			throw new IOException(this.toString() + " failed verification");
 		}
 
+	}
+
+	public void verify(long pos) throws IOException {
+		if (offset() != pos) {
+			throw new IOException(this.toString() + " offset is not " + pos);
+		}
+		verifySignature();
 	}
 
 	/**
@@ -190,28 +210,38 @@ public class BlockHeader {
 	 * Clear (fill with null) the entire buffer from the beginning. Adds the sign
 	 * data back in after the buffer is cleared.
 	 */
-	public void clear() {
+	private void clear() {
 		buffer.position(0);
-		doClear();
-		sign();
-	}
-
-	/**
-	 * Clear (fill with null) the buffer from the current position.
-	 */
-	private void doClear() {
 		while (buffer.hasRemaining()) {
 			int limit = Integer.min(buffer.remaining(), MemoryMappedStorage.BLOCK_SIZE);
 			buffer.put(CLEAN_BUFFER, 0, limit);
 		}
+		;
+		sign();
 	}
+
+//	/**
+//	 * Clear (fill with null) the buffer from the current position.
+//	 */
+//	private void doClear() {
+//		while (buffer.hasRemaining()) {
+//			int limit = Integer.min(buffer.remaining(), MemoryMappedStorage.BLOCK_SIZE);
+//			buffer.put(CLEAN_BUFFER, 0, limit);
+//		}
+//	}
 
 	/**
 	 * Clear (fill with null) all user data in buffer. This is all the data after
 	 * the header.
+	 * 
+	 * @throws IOException
 	 */
-	public void clearData() {
+	public void clearData() throws IOException {
 		buffer.position(HEADER_SIZE);
-		doClear();
+		while (buffer.hasRemaining()) {
+			int limit = Integer.min(buffer.remaining(), MemoryMappedStorage.BLOCK_SIZE);
+			buffer.put(CLEAN_BUFFER, 0, limit);
+		}
+		verifySignature();
 	}
 }

@@ -9,13 +9,10 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.stream.Collectors;
-
 import org.apache.jena.util.iterator.WrappedIterator;
 import org.junit.Before;
 import org.junit.Test;
@@ -23,21 +20,19 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xenei.blockstorage.MemoryMappedStorage;
 
-
-
 public class MMFreeListTest {
 
 	TestBufferFactory factory = new TestBufferFactory();
 	MMFreeList freeList;
-	private static final Logger LOG = LoggerFactory.getLogger( MMFreeListTest.class);
+	private static final Logger LOG = LoggerFactory.getLogger(MMFreeListTest.class);
 
 	public MMFreeListTest() {
 		System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "debug");
 	}
-	
+
 	@Before
 	public void setup() throws IOException {
-	
+
 		factory.map.clear();
 		freeList = new MMFreeList(factory);
 	}
@@ -79,33 +74,31 @@ public class MMFreeListTest {
 		assertEquals(capacity, lb.capacity());
 		assertEquals(capacity, lb.limit());
 		assertEquals(recordNumber.longValue(), lb.get(0));
-		
+
 		verifyList();
 
 		assertEquals(recordNumber, freeList.getBlock());
 	}
 
 	private void verifyList() {
-		
+
 		Set<Long> seen = new TreeSet<Long>();
-		List<Long> recs = WrappedIterator.create( freeList.getRecords() ).toList();
-		assertEquals( recs.size(), freeList.count());
-		
-		seen.addAll( recs );
-		assertEquals( seen.size(), recs.size() );
-		
+		List<Long> recs = WrappedIterator.create(freeList.getRecords()).toList();
+		assertEquals(recs.size(), freeList.count());
+
+		seen.addAll(recs);
+		assertEquals(seen.size(), recs.size());
+
 		for (FreeNode node : freeList.pages) {
-			recs = WrappedIterator.create( node.getRecords() ).toList();
-			assertEquals( recs.size(), node.count());
+			recs = WrappedIterator.create(node.getRecords()).toList();
+			assertEquals(recs.size(), node.count());
 			int oldCount = seen.size();
-			seen.addAll( recs );
+			seen.addAll(recs);
 			int newCount = seen.size() - oldCount;
-			assertEquals( newCount, recs.size() );
-			
-			
+			assertEquals(newCount, recs.size());
 		}
-		System.out.println("veified: "+ String.join( ", ", seen.stream().map( Object::toString ).collect( Collectors.toList())));
-	} 
+	}
+
 	@Test
 	public void testPageExpansion() throws IOException {
 
@@ -130,7 +123,7 @@ public class MMFreeListTest {
 		assertEquals(capacity, freeList.blockCount());
 		assertEquals(0, freeList.pages.size());
 		verifyList();
-		
+
 		// now add one more
 		Long recordNumber = (3L + capacity) * MemoryMappedStorage.BLOCK_SIZE;
 		freeList.add(recordNumber);

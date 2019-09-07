@@ -121,8 +121,8 @@ public class MMFreeList extends FreeNode {
 		if (pages.isEmpty()) {
 			return this.getRecords();
 		}
-		return WrappedIterator.create(this.getRecords()).andThen(WrappedIterator.createIteratorIterator(
-				pages.stream().map(FreeNode::getRecords).iterator()));
+		return WrappedIterator.create(this.getRecords())
+				.andThen(WrappedIterator.createIteratorIterator(pages.stream().map(FreeNode::getRecords).iterator()));
 
 	}
 
