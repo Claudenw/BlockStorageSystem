@@ -112,35 +112,41 @@ public class FreeNode extends BlockHeader {
 				getBuffer().capacity(), count());
 	}
 
-	protected FreeRecordIterator getRecords() {
+	/**
+	 * Get an iterator over the record numbers in this free node.
+	 * 
+	 * @return the iterator over the record numbers.
+	 */
+	protected Iterator<Long> getRecords() {
 		return new FreeRecordIterator();
 	}
-	
-	public class FreeRecordIterator implements Iterator<Long>
-	{
-		LongBuffer lb;
-		int pos;
-		
+
+	/**
+	 * An iterator over the record numbers.
+	 *
+	 */
+	private class FreeRecordIterator implements Iterator<Long> {
+		private LongBuffer lb;
+		private int pos;
+
+		/**
+		 * Constructor.
+		 */
 		FreeRecordIterator() {
 			lb = getFreeRecords();
 		}
 
 		@Override
 		public boolean hasNext() {
-			return pos<lb.limit() && lb.get(pos) > 0;
+			return pos < lb.limit() && lb.get(pos) > 0;
 		}
 
 		@Override
 		public Long next() {
-			if (hasNext())
-			{
+			if (hasNext()) {
 				return lb.get(pos++);
 			}
 			throw new NoSuchElementException();
 		}
-		
-		
-		
-		
 	}
 }

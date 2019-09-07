@@ -22,15 +22,11 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
-import java.nio.MappedByteBuffer;
-import java.nio.channels.FileChannel;
-import java.nio.channels.FileChannel.MapMode;
 import java.util.ArrayList;
 import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.xenei.blockstorage.MemoryMappedStorage;
 import org.xenei.spanbuffer.SpanBuffer;
 import org.xenei.spanbuffer.lazy.tree.TreeLazyLoader;
 import org.xenei.spanbuffer.lazy.tree.node.BufferFactory;
@@ -53,25 +49,15 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 	/**
 	 * Constructor.
 	 * 
-	 * @param freeList    the free list.
-	 * @param fileChannel the file channel.
+	 * @param factory the buffer factory instance.
 	 */
-	public MMSerde(MMFreeList freeList, FileChannel fileChannel) {
-		this(new MMBufferFactory(fileChannel, freeList));
-	}
-
-	/**
-	 * Constructor.
-	 * 
-	 * @param factory the factory
-	 */
-	private MMSerde(MMBufferFactory factory) {
-		LOG.debug( "Creating MMSerde");
+	public MMSerde(MMBufferFactory factory) {
+		LOG.debug("Creating MMSerde");
 		this.factory = factory;
-		this.serializer = new MMSerializer(factory, factory.freeList);
-		this.deserializer = new MMDeserializer(factory, factory.freeList);
+		this.serializer = new MMSerializer(factory);
+		this.deserializer = new MMDeserializer(factory);
 		verify();
-		LOG.debug( "Created MMSerde");
+		LOG.debug("Created MMSerde");
 	}
 
 	/**
@@ -118,7 +104,6 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 	static class MMSerializer implements TreeSerializer<MMPosition> {
 
 		private MMBufferFactory bufferFactory;
-		private MMFreeList freeList;
 		private static final Logger LOG = LoggerFactory.getLogger(MMSerializer.class);
 
 		/**
@@ -127,9 +112,8 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 		 * @param factory  the factory to use.
 		 * @param freeList the free list.
 		 */
-		public MMSerializer(MMBufferFactory factory, MMFreeList freeList) {
+		public MMSerializer(MMBufferFactory factory) {
 			this.bufferFactory = factory;
-			this.freeList = freeList;
 		}
 
 		@Override
@@ -174,12 +158,12 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 			buffer.position(0);
 			ByteBuffer other = bufferFactory.readBuffer(position);
 			other.position(0);
-			other.put( buffer );
+			other.put(buffer);
 			BlockHeader oHeader = new BlockHeader(other);
 			other.position(BlockHeader.HEADER_SIZE);
 			other.put(buffer);
-			oHeader.offset( position.offset() );
-			freeList.add(header.offset());
+			oHeader.offset(position.offset());
+			bufferFactory.getFreeList().add(header.offset());
 			LOG.debug("Serialized {} to {}", oHeader, position);
 			return position;
 		}
@@ -206,7 +190,6 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 	 */
 	private static class MMDeserializer implements TreeDeserializer<MMPosition> {
 		private final MMBufferFactory factory;
-		private final MMFreeList freeList;
 		private static final Logger LOG = LoggerFactory.getLogger(MMDeserializer.class);
 
 		/**
@@ -215,9 +198,8 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 		 * @param fileChannel the file channel to write on.
 		 * @param freeList    The freelist to use.
 		 */
-		public MMDeserializer(MMBufferFactory factory, MMFreeList freeList) {
+		public MMDeserializer(MMBufferFactory factory) {
 			this.factory = factory;
-			this.freeList = freeList;
 		}
 
 		@Override
@@ -229,6 +211,10 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 			ByteBuffer buffer = factory.readBuffer(position);
 			BlockHeader header = new BlockHeader(buffer);
 			LOG.debug("Deserialized {} from {}", header, position);
+			header.verifySignature();
+			if (header.is(BlockHeader.FREE_FLAG)) {
+				throw new IOException("Attempted to read free record at " + position);
+			}
 			if (header.offset() != position.offset()) {
 				String msg = String.format("Block header %s and position %s do not match.", header, position);
 				LOG.error(msg);
@@ -271,14 +257,14 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 				return;
 			}
 
-			ByteBuffer root = factory.readBuffer(rootPosition);
-			BlockHeader header = new BlockHeader(root);
+			final ByteBuffer root = factory.readBuffer(rootPosition);
+			final BlockHeader header = new BlockHeader(root);
 			byte bType = root.position(BlockHeader.HEADER_SIZE).get();
 			LOG.debug("Deleting {} of type {}", header, bType);
 			/*
-			 * if root is not and Outer Node, we need to read buffer as series of long
-			 * values and delete those before we delete the root node. The nodes we read
-			 * will be either INNER or LEAF nodes.
+			 * if root is not and Outer Node the node will be either INNER or LEAF nodes. If
+			 * is is an Inner node, we need to read the buffer as series of long values and
+			 * delete those before we delete the root node. T
 			 */
 
 			if (bType != InnerNode.OUTER_NODE_FLAG) {
@@ -289,103 +275,23 @@ public class MMSerde extends AbstractSerde<MMPosition> {
 					if (bType == InnerNode.LEAF_NODE_FLAG) {
 						ByteBuffer leaf = factory.readBuffer(position);
 						BlockHeader leafHeader = new BlockHeader(leaf);
-						leafHeader.clear();
-						freeList.add(pos);
+						leafHeader.free();
+						factory.getFreeList().add(pos);
 					} else {
-						// INNER node so cascade down.
+						// INNER node so recurse down.
 						delete(new MMPosition(pos));
 					}
 				}
 			}
 
 			// delete the root now
-			header.clear();
-			freeList.add(rootPosition.offset());
+			header.free();
+			factory.getFreeList().add(header.offset());
 		}
 
 		@Override
 		public int headerSize() {
 			return BlockHeader.HEADER_SIZE;
-		}
-
-	}
-
-	/**
-	 * The Buffer Factory.
-	 *
-	 */
-	private static class MMBufferFactory implements BufferFactory {
-		private final MMFreeList freeList;
-		private final FileChannel fileChannel;
-		private final static Logger LOG = LoggerFactory.getLogger(MMBufferFactory.class);
-
-		/**
-		 * Constructor.
-		 * 
-		 * @param fileChannel the file channel.
-		 * @param freeList    the free list.
-		 */
-		public MMBufferFactory(FileChannel fileChannel, MMFreeList freeList) {
-			this.freeList = freeList;
-			this.fileChannel = fileChannel;
-		}
-
-		@Override
-		public int bufferSize() {
-			return BlockHeader.BLOCK_SPACE - BlockHeader.HEADER_SIZE;
-		}
-
-		@Override
-		public int headerSize() {
-			return BlockHeader.HEADER_SIZE;
-		}
-
-		@Override
-		public ByteBuffer createBuffer() throws IOException {
-			Long pos = freeList.getBlock();
-			if (pos == null) {
-				pos = fileChannel.size();
-			}
-
-			MappedByteBuffer mBuffer = fileChannel.map(MapMode.READ_WRITE, pos, MemoryMappedStorage.BLOCK_SIZE)
-					.position(0);
-			BlockHeader header = new BlockHeader(mBuffer);
-			header.clear();
-			header.offset(pos);
-			LOG.debug("Creating buffer {}", header);
-			return mBuffer.position(BlockHeader.HEADER_SIZE);
-		}
-
-		/**
-		 * Read a buffer.
-		 * 
-		 * @param position the position to read the buffer from, if position = -1 create
-		 *                 new buffer.
-		 * @return the read buffer.
-		 * @throws IOException on error.
-		 */
-		public ByteBuffer readBuffer(MMPosition position) throws IOException {
-			if (position.isNoData()) {
-				return createBuffer();
-			}
-			return fileChannel.map(MapMode.READ_WRITE, position.offset(), MemoryMappedStorage.BLOCK_SIZE)
-					.position(BlockHeader.HEADER_SIZE);
-		}
-
-		@Override
-		public void free(ByteBuffer buffer) throws IOException {
-			/*
-			 * We don't do anything as we do not free the buffers but let the tracking
-			 * system handle it.
-			 */
-			BlockHeader header = new BlockHeader(buffer);
-			long offset = header.offset();
-			LOG.debug("Freeing {}", header);
-			if (offset == 0) {
-				throw new IOException("Can not delete block 0");
-			}
-			header.clear();
-			freeList.add(offset);
 		}
 
 	}

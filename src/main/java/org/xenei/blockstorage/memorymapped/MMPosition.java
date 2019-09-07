@@ -64,4 +64,14 @@ public class MMPosition implements Position {
 	public String toString() {
 		return Long.toString(offset);
 	}
+
+	@Override
+	public int hashCode() {
+		return Long.hashCode(offset);
+	}
+
+	@Override
+	public boolean equals(Object o) {
+		return (o instanceof MMPosition) && ((MMPosition) o).offset == offset;
+	}
 }

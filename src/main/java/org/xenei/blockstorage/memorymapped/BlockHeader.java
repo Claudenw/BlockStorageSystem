@@ -20,7 +20,11 @@ package org.xenei.blockstorage.memorymapped;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.xenei.blockstorage.MemoryMappedStorage;
+import org.xenei.spanbuffer.Factory;
 
 /**
  * A block header is the first set of data in a block and is used by the system
@@ -33,11 +37,16 @@ import org.xenei.blockstorage.MemoryMappedStorage;
  * 
  */
 public class BlockHeader {
+	public static final byte FREE_FLAG = 0x1;
+	private static final Logger LOG = LoggerFactory.getLogger(BlockHeader.class);
+	private static int SIGNATURE_SIZE = 5;
+	private static ByteBuffer SIGNATURE = ByteBuffer.wrap(new byte[] { 0x0, (byte) 0xFF, 'B', 'H', 0x77 });
 	private static byte[] CLEAN_BUFFER;
-	// integer at end of header size is accounted for in FreeNode
-	public static final int HEADER_SIZE = 2 * Long.BYTES + Integer.SIZE;
+	// sig, status flag, file offset, used bytes
+	public static final int HEADER_SIZE = SIGNATURE_SIZE + 1 + Long.BYTES + Integer.SIZE;
 	public static final int BLOCK_SPACE = MemoryMappedStorage.BLOCK_SIZE - HEADER_SIZE;
-	private static final int OFFSET_OFFSET = 0;
+	private static final int STATUS_OFFSET = SIGNATURE_SIZE;
+	private static final int OFFSET_OFFSET = STATUS_OFFSET + 1;
 	private static final int USED_OFFSET = OFFSET_OFFSET + Long.BYTES;
 
 	private final ByteBuffer buffer;
@@ -59,10 +68,86 @@ public class BlockHeader {
 		this.buffer = buffer;
 	}
 
+	/**
+	 * Mark the header as free. This operation clears all the buffer data and then
+	 * sets the FREE_FLAG and the offset. All other data is destroyed.
+	 */
+	public void free() {
+		long pos = offset();
+		clear();
+		offset(pos);
+		setFlag(FREE_FLAG);
+	}
+
+	/**
+	 * Add the block signature to the block. Every block in the system should start
+	 * with the signature.
+	 */
+	public void sign() {
+		buffer.duplicate().position(0).put(SIGNATURE);
+	}
+
+	/**
+	 * Verify that the signature is set.
+	 * 
+	 * @throws IOException if the signature is not valid.
+	 */
+	public void verifySignature() throws IOException {
+
+		if (Factory.wrap(buffer).startsWith(Factory.wrap(SIGNATURE))) {
+			LOG.debug("{} Signature verified", this);
+		} else {
+			throw new IOException(this.toString() + " failed verification");
+		}
+
+	}
+
+	/**
+	 * Sets the specified byte flag in the status byte.
+	 * 
+	 * @param flag the flag to set.
+	 */
+	public void setFlag(byte flag) {
+		buffer.put(STATUS_OFFSET, (byte) (flag | buffer.get(STATUS_OFFSET)));
+	}
+
+	/**
+	 * Verifies a flag is set.
+	 * 
+	 * @param flag the flage to check.
+	 * @return true if the flag is set, false otherwise.
+	 */
+	public boolean is(byte flag) {
+		return getFlag(flag) == flag;
+	}
+
+	/**
+	 * get the value for the flag if it is set..
+	 * 
+	 * Masks the status byte with the flag bytes returning only the bits in the flag
+	 * that are also on in the status.
+	 * 
+	 * @param flag the flag to check.
+	 * @return the status bytes with the bits masked.
+	 */
+	public byte getFlag(byte flag) {
+		return (byte) (flag & buffer.get(STATUS_OFFSET));
+	}
+
+	/**
+	 * Set the offset for this block.
+	 * 
+	 * @param offset the offset of the block
+	 */
 	public void offset(long offset) {
 		buffer.putLong(OFFSET_OFFSET, offset);
 	}
 
+	/**
+	 * Get the offset for this block.
+	 * 
+	 * @return the offset for this block.
+	 */
 	public long offset() {
 		return buffer.getLong(OFFSET_OFFSET);
 	}
@@ -87,6 +172,11 @@ public class BlockHeader {
 		return buffer.getInt(USED_OFFSET);
 	}
 
+	/**
+	 * Get the buffer this header is part of.
+	 * 
+	 * @return the buffer this header is part of.
+	 */
 	public ByteBuffer getBuffer() {
 		return buffer;
 	}
@@ -97,11 +187,13 @@ public class BlockHeader {
 	}
 
 	/**
-	 * Clear (fill with null) the entire buffer from the beginning.
+	 * Clear (fill with null) the entire buffer from the beginning. Adds the sign
+	 * data back in after the buffer is cleared.
 	 */
 	public void clear() {
 		buffer.position(0);
 		doClear();
+		sign();
 	}
 
 	/**

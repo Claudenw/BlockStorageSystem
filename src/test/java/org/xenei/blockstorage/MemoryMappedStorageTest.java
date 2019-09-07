@@ -18,6 +18,7 @@
 package org.xenei.blockstorage;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 import java.io.File;
 import java.io.IOException;
@@ -74,6 +75,13 @@ public class MemoryMappedStorageTest extends AbstractStorageTest {
 		assertEquals(10240, storage.stats().dataLength());
 		assertEquals(6144, storage.stats().freeSpace());
 		assertEquals(3, storage.stats().deletedBlocks());
+
+		try {
+			storage.read(first).getText();
+			fail("Should have thrown IOException");
+		} catch (IOException expected) {
+			// do nothign.
+		}
 
 		long third = storage.append(Factory.wrap("Hello again"));
 		assertEquals(4096, third);

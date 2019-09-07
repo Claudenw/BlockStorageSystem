@@ -20,15 +20,11 @@ package org.xenei.blockstorage.memorymapped;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
-import java.nio.channels.FileChannel;
-import java.nio.channels.FileChannel.MapMode;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.stream.Collectors;
-
 import org.apache.jena.util.iterator.WrappedIterator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,70 +42,66 @@ public class MMFreeList extends FreeNode {
 	private final static Logger LOG = LoggerFactory.getLogger(MMFreeList.class);
 
 	/**
-	 * Constructor.
+	 * Constructor
 	 * 
-	 * @param fileChannel The file channel to use.
-	 * @throws IOException on error.
+	 * @param factory the buffer factory this list should use.
+	 * @throws IOException on error
 	 */
-	public MMFreeList(FileChannel fileChannel) throws IOException {
-		this(new FileListBufferFactory(fileChannel));
-	}
-
-	/**
-	 * TESTING ONLY
-	 * 
-	 * @throws IOException on error.
-	 **/
-	MMFreeList(BufferFactory factory) throws IOException {
-		super(factory.readBuffer(0));
-		LOG.debug( "Creating FreeList");
+	public MMFreeList(BufferFactory factory) throws IOException {
+		super(factory.readBuffer(new MMPosition(0)));
+		LOG.debug("Creating FreeList");
 		this.pages = new ArrayList<FreeNode>();
 
 		this.bufferFactory = factory;
 		long nextBlock = this.nextBlock();
 		if (nextBlock > 0) {
-			LOG.debug( "Reading next FreeNode {}", nextBlock );
-			FreeNode node = new FreeNode(factory.readBuffer(nextBlock));
+			LOG.debug("Reading next FreeNode {}", nextBlock);
+			FreeNode node = new FreeNode(factory.readBuffer(new MMPosition(nextBlock)));
 			pages.add(node);
 			nextBlock = node.nextBlock();
 		}
 		verify();
-		LOG.debug( "FreeList created");
+		LOG.debug("FreeList created");
 	}
-	
+
+	/**
+	 * Verify that the list contains what appear to be valid record numbers.
+	 */
 	private void verify() {
-		
+
 		Set<Long> seen = new TreeSet<Long>();
-		List<Long> recs = WrappedIterator.create( getRecords() ).toList();
-		if ( recs.size() != count()) {
+		List<Long> recs = WrappedIterator.create(getRecords()).toList();
+		if (recs.size() != count()) {
 			throw new IllegalStateException("Root count() does not equal records count");
 		}
-		
-		seen.addAll( recs );
-		if ( seen.size() != recs.size() ) {
+
+		seen.addAll(recs);
+		if (seen.size() != recs.size()) {
 			throw new IllegalStateException("possible duplicate records in free list");
 		}
-		
-		for (int i = 0;i<pages.size();i++) {
+
+		for (int i = 0; i < pages.size(); i++) {
 			FreeNode node = pages.get(i);
-			recs = WrappedIterator.create( node.getRecords() ).toList();
-			if ( recs.size() != node.count())
-			{
-				throw new IllegalStateException("Page "+i+" count() does not equal records count");
-				
+			recs = WrappedIterator.create(node.getRecords()).toList();
+			if (recs.size() != node.count()) {
+				throw new IllegalStateException("Page " + i + " count() does not equal records count");
+
 			}
 			int oldCount = seen.size();
-			seen.addAll( recs );
+			seen.addAll(recs);
 			int newCount = seen.size() - oldCount;
-			if( newCount != recs.size() );
-			{
-				throw new IllegalStateException("possible duplicate records on page "+i+" in free list");
+			if (newCount != recs.size()) {
+				throw new IllegalStateException("possible duplicate records on page " + i + " in free list");
 			}
-			
-		}
-		LOG.info( "FreeList verified {} free nodes", seen.size());
-	} 
 
+		}
+		for (Long l : seen) {
+			if ((l % MemoryMappedStorage.BLOCK_SIZE) != 0) {
+				throw new IllegalStateException("Invalid block number " + l);
+			}
+		}
+		LOG.info("FreeList verified {} free nodes", seen.size());
+	}
 
 	/**
 	 * Get the number of blocks in the free list.
@@ -119,17 +111,20 @@ public class MMFreeList extends FreeNode {
 	public int blockCount() {
 		return count() + pages.stream().mapToInt(FreeNode::count).sum();
 	}
-	
+
+	/**
+	 * Get an iterator of the free blocks.
+	 * 
+	 * @return an iterator of the free blocks.
+	 */
 	public Iterator<Long> getFreeBlocks() {
-		if (pages.isEmpty())
-		{
-		 return this.getRecords();
+		if (pages.isEmpty()) {
+			return this.getRecords();
 		}
-		return WrappedIterator.create( this.getRecords() )
-		.andThen( WrappedIterator.createIteratorIterator( 
-				(Iterator<Iterator<Long>>) pages.stream().map( FreeNode::getRecords)));
-		
-	}      
+		return WrappedIterator.create(this.getRecords()).andThen(WrappedIterator.createIteratorIterator(
+				pages.stream().map(FreeNode::getRecords).iterator()));
+
+	}
 
 	/**
 	 * The number of bytes represented by all the blocks on the free list.
@@ -216,57 +211,25 @@ public class MMFreeList extends FreeNode {
 	}
 
 	/**
-	 * The buffer factory for the free list.
+	 * the methods the FreeList buffer factory must provide.
 	 *
 	 */
 	public interface BufferFactory {
 		/**
-		 * Create a buffer.
+		 * Create a new buffer.
 		 * 
-		 * @return the new byte buffer.
-		 * @throws IOException on error.
+		 * @return a new empty buffer.
+		 * @throws IOException on error
 		 */
 		ByteBuffer createBuffer() throws IOException;
 
 		/**
-		 * Read a specific buffer.
+		 * Read the specified buffer.
 		 * 
-		 * @param offset the buffer to read.
-		 * @return the read buffer.
-		 * @throws IOException on error.
+		 * @param offset the buffer record/offset to read.
+		 * @return the buffer
+		 * @throws IOException on error
 		 */
-		ByteBuffer readBuffer(long offset) throws IOException;
-	}
-
-	/**
-	 * The BufferFactory for the MMFreeList.
-	 *
-	 */
-	private static class FileListBufferFactory implements BufferFactory {
-
-		private final FileChannel fileChannel;
-
-		/**
-		 * Constructor.
-		 * 
-		 * @param fileChannel the file channel to use.
-		 */
-		FileListBufferFactory(FileChannel fileChannel) {
-			this.fileChannel = fileChannel;
-
-		}
-
-		@Override
-		public ByteBuffer createBuffer() throws IOException {
-			LOG.debug("Creating buffer at {}", fileChannel.size());
-			return fileChannel.map(MapMode.READ_WRITE, fileChannel.size(), MemoryMappedStorage.BLOCK_SIZE);
-		}
-
-		@Override
-		public ByteBuffer readBuffer(long offset) throws IOException {
-			LOG.debug("Reading buffer at {}", offset);
-			return fileChannel.map(MapMode.READ_WRITE, offset, MemoryMappedStorage.BLOCK_SIZE);
-		}
-
+		ByteBuffer readBuffer(MMPosition offset) throws IOException;
 	}
 }

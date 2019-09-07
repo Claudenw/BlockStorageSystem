@@ -31,13 +31,12 @@ import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xenei.blockstorage.memorymapped.BlockHeader;
-import org.xenei.blockstorage.memorymapped.MMFreeList;
+import org.xenei.blockstorage.memorymapped.MMBufferFactory;
 import org.xenei.blockstorage.memorymapped.MMOutputStream;
 import org.xenei.blockstorage.memorymapped.MMPosition;
 import org.xenei.blockstorage.memorymapped.MMSerde;
 import org.xenei.spanbuffer.SpanBuffer;
 import org.xenei.spanbuffer.lazy.LazyLoadedBuffer;
-
 
 /**
  * A memory mapped storage implementation. Reads and write the the file via
@@ -49,10 +48,9 @@ public class MemoryMappedStorage implements Storage {
 	private final static Logger LOG = LoggerFactory.getLogger(MemoryMappedStorage.class);
 	public final static int BLOCK_SIZE = 2 * 1024;
 
-	private FileChannel fileChannel;
-	private MMFreeList freeList;
-	private Stats stats;
-	private MMSerde serde;
+	private final MMBufferFactory factory;
+	private final Stats stats;
+	private final MMSerde serde;
 
 	/**
 	 * Constructor.
@@ -63,7 +61,7 @@ public class MemoryMappedStorage implements Storage {
 	@SuppressWarnings("resource")
 	public MemoryMappedStorage(String fileName) throws IOException {
 		boolean clearBlock = false;
-		LOG.debug( "Loading: {}", fileName );
+		LOG.debug("Loading: {}", fileName);
 		File f = new File(fileName);
 
 		if (!f.exists()) {
@@ -71,17 +69,17 @@ public class MemoryMappedStorage implements Storage {
 			clearBlock = true;
 		}
 		RandomAccessFile file = new RandomAccessFile(fileName, "rw");
-		fileChannel = file.getChannel();
+		FileChannel fileChannel = file.getChannel();
 		if (clearBlock) {
 			LOG.debug("Clearing free list");
 			MappedByteBuffer mBuffer = fileChannel.map(MapMode.READ_WRITE, 0, BLOCK_SIZE);
 			BlockHeader header = new BlockHeader(mBuffer);
 			header.clear();
 		}
-		freeList = new MMFreeList(fileChannel);
-		serde = new MMSerde(freeList, fileChannel);
-		stats = new StatsImpl();
-		LOG.info( "{} on startup {}", fileName, stats );
+		factory = new MMBufferFactory(fileChannel);
+		serde = new MMSerde(factory);
+		stats = factory.getStats();
+		LOG.info("{} on startup {}", fileName, stats);
 	}
 
 	@Override
@@ -145,6 +143,9 @@ public class MemoryMappedStorage implements Storage {
 
 	@Override
 	public SpanBuffer read(long offset) throws IOException {
+		if ((offset % BLOCK_SIZE) != 0) {
+			throw new IOException("invalid record number");
+		}
 		return new LazyLoadedBuffer(serde.getLazyLoader(new MMPosition(offset)));
 	}
 
@@ -155,40 +156,8 @@ public class MemoryMappedStorage implements Storage {
 
 	@Override
 	public void close() throws IOException {
-		fileChannel.close();
-		freeList = null;
+		factory.close();
 		LOG.debug("Closed System");
-	}
-
-	/**
-	 * Stats implementation foe MemoryMappedStorage.
-	 *
-	 */
-	public class StatsImpl implements Stats {
-
-		@Override
-		public long dataLength() {
-			try {
-				return fileChannel.size();
-			} catch (IOException e) {
-				return -1;
-			}
-		}
-
-		@Override
-		public long deletedBlocks() {
-			return (freeList == null) ? -1 : freeList.blockCount();
-		}
-
-		@Override
-		public long freeSpace() {
-			return (freeList == null) ? -1 : freeList.freeSpace();
-		}
-
-		@Override
-		public String toString() {
-			return String.format("l:%s f:%s d:%s", dataLength(), freeSpace(), deletedBlocks());
-		}
 	}
 
 }

@@ -27,7 +27,7 @@ import org.xenei.blockstorage.MemoryMappedStorage;
 
 public class MMFreeListTest {
 
-	BufferFactory factory = new BufferFactory();
+	TestBufferFactory factory = new TestBufferFactory();
 	MMFreeList freeList;
 	private static final Logger LOG = LoggerFactory.getLogger( MMFreeListTest.class);
 
@@ -227,24 +227,24 @@ public class MMFreeListTest {
 		assertTrue(freeList.isEmpty());
 	}
 
-	private class BufferFactory implements MMFreeList.BufferFactory {
+	private class TestBufferFactory implements MMFreeList.BufferFactory {
 
-		Map<Long, ByteBuffer> map = new HashMap<Long, ByteBuffer>();
+		Map<MMPosition, ByteBuffer> map = new HashMap<MMPosition, ByteBuffer>();
 
 		@Override
 		public ByteBuffer createBuffer() throws IOException {
-			return readBuffer(map.size());
+			return readBuffer(new MMPosition(map.size()));
 		}
 
 		@Override
-		public ByteBuffer readBuffer(long offset) throws IOException {
+		public ByteBuffer readBuffer(MMPosition offset) throws IOException {
 			ByteBuffer bb = null;
 			if (map.containsKey(offset)) {
 				bb = map.get(offset);
 			} else {
 				bb = ByteBuffer.allocate(MemoryMappedStorage.BLOCK_SIZE);
 				BlockHeader header = new BlockHeader(bb);
-				header.offset(offset);
+				header.offset(offset.offset());
 				map.put(offset, bb);
 			}
 			return bb;
